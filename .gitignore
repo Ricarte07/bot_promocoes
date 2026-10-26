@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+services/notifier/bin/
+node_modules/
+.next/
+.env
+.env.local
+.vscode/
+.idea/
