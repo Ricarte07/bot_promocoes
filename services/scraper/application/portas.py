@@ -12,11 +12,26 @@ class PrecoColetado:
     preco: Preco
 
 
+@dataclass(frozen=True)
+class ProdutoMonitorado:
+    """Um endereço a visitar: em qual loja e em qual URL está o produto."""
+
+    loja: str
+    url: str
+
+
 class ColetorDePrecos(ABC):
     """Porta de entrada: cada loja terá um adaptador em infrastructure/scrapers."""
 
     @abstractmethod
     def coletar(self) -> list[PrecoColetado]: ...
+
+
+class FonteDeProdutosMonitorados(ABC):
+    """Porta de saída: de onde vem a lista do que monitorar (JSON hoje, banco depois)."""
+
+    @abstractmethod
+    def listar(self) -> list[ProdutoMonitorado]: ...
 
 
 class PublicadorDeEventos(ABC):
