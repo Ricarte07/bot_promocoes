@@ -9,9 +9,18 @@ class Oferta:
 
     DESCONTO_MINIMO = Decimal("15")
 
-    def __init__(self, produto_id: str, loja: str, preco_referencia: Preco):
+    def __init__(
+        self,
+        produto_id: str,
+        loja: str,
+        preco_referencia: Preco,
+        nome: str = "",
+        url: str = "",
+    ):
         self.produto_id = produto_id
         self.loja = loja
+        self.nome = nome
+        self.url = url
         self.preco_referencia = preco_referencia
         self.preco_atual = preco_referencia
         self._eventos: list[PromocaoDetectada] = []
@@ -31,6 +40,8 @@ class Oferta:
                     preco_atual=novo_preco.valor,
                     preco_referencia=self.preco_referencia.valor,
                     desconto_percentual=desconto,
+                    nome=self.nome,
+                    url=self.url,
                 )
             )
 

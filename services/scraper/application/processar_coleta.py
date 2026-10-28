@@ -22,7 +22,13 @@ class ProcessarColeta:
             oferta = self.repositorio.buscar(item.produto_id, item.loja)
 
             if oferta is None:
-                oferta = Oferta(item.produto_id, item.loja, preco_referencia=item.preco)
+                oferta = Oferta(
+                    item.produto_id,
+                    item.loja,
+                    preco_referencia=item.preco,
+                    nome=item.nome,
+                    url=item.url,
+                )
             else:
                 oferta.registrar_preco(item.preco)
 

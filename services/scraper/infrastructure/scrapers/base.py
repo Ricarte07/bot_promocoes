@@ -112,4 +112,6 @@ class ColetorPorUrls(ColetorDePrecos):
             produto_id=produto.produto_id,
             loja=self.loja,
             preco=Preco(produto.preco_avista),
+            nome=produto.nome,
+            url=url,
         )

@@ -148,6 +148,8 @@ def test_coleta_produto_em_estoque_com_loja_americanas():
     assert itens[0].produto_id == "8776497"
     assert itens[0].loja == LOJA == "americanas"
     assert itens[0].preco.valor == Decimal("901.55")
+    assert itens[0].nome == "Impressora Epson EcoTank L1250 Wi-Fi Bivolt"
+    assert itens[0].url == URL_EM_ESTOQUE
 
 
 def test_ignora_produto_sem_estoque():

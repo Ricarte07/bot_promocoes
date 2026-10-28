@@ -6,6 +6,7 @@ from application.portas import (
     PrecoColetado,
     ProdutoMonitorado,
 )
+from domain.eventos import PromocaoDetectada
 from domain.preco import Preco
 from infrastructure.mensageria.console import PublicadorNoConsole
 from infrastructure.persistencia.memoria import OfertaRepositorioEmMemoria
@@ -74,3 +75,25 @@ def test_rodada_completa_publica_promocao_na_segunda_coleta():
     assert len(mensagens) == 1
     assert "kabum" in mensagens[0]
     assert "20.00%" in mensagens[0]
+
+
+def test_mensagem_no_console_mostra_nome_e_link():
+    mensagens: list[str] = []
+    publicador = PublicadorNoConsole(escrever=mensagens.append)
+
+    publicador.publicar(
+        PromocaoDetectada(
+            produto_id="1",
+            loja="kabum",
+            preco_atual=Decimal("800"),
+            preco_referencia=Decimal("1000"),
+            desconto_percentual=Decimal("20.00"),
+            nome="Notebook X",
+            url="https://www.kabum.com.br/produto/1/notebook-x",
+        )
+    )
+
+    assert mensagens == [
+        "[PROMOÇÃO] kabum | Notebook X | de R$ 1000 por R$ 800 (20.00% de desconto) "
+        "https://www.kabum.com.br/produto/1/notebook-x"
+    ]

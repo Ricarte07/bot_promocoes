@@ -14,8 +14,9 @@ class PublicadorNoConsole(PublicadorDeEventos):
         self._escrever = escrever
 
     def publicar(self, evento: PromocaoDetectada) -> None:
+        descricao = evento.nome or f"produto {evento.produto_id}"
         self._escrever(
-            f"[PROMOÇÃO] {evento.loja} | produto {evento.produto_id} | "
+            f"[PROMOÇÃO] {evento.loja} | {descricao} | "
             f"de R$ {evento.preco_referencia} por R$ {evento.preco_atual} "
-            f"({evento.desconto_percentual}% de desconto)"
+            f"({evento.desconto_percentual}% de desconto) {evento.url}".rstrip()
         )
