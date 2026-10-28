@@ -30,7 +30,13 @@ def montar():
 
 
 def item(valor):
-    return PrecoColetado("notebook-x", "loja-a", Preco(Decimal(valor)))
+    return PrecoColetado(
+        "notebook-x",
+        "loja-a",
+        Preco(Decimal(valor)),
+        nome="Notebook X",
+        url="https://loja-a.com/notebook-x",
+    )
 
 
 def test_primeira_coleta_so_registra_a_oferta():
@@ -46,7 +52,10 @@ def test_queda_grande_publica_promocao():
     caso_de_uso.executar()
     coletor.precos = [item("800")]
     assert caso_de_uso.executar() == 1
-    assert publicador.publicados[0].desconto_percentual == Decimal("20.00")
+    evento = publicador.publicados[0]
+    assert evento.desconto_percentual == Decimal("20.00")
+    assert evento.nome == "Notebook X"
+    assert evento.url == "https://loja-a.com/notebook-x"
 
 
 def test_queda_pequena_nao_publica():

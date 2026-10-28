@@ -24,6 +24,8 @@ from domain.repositorios import OfertaRepositorio
 from infrastructure.mensageria.console import PublicadorNoConsole
 from infrastructure.persistencia.memoria import OfertaRepositorioEmMemoria
 from infrastructure.persistencia.produtos_json import FonteDeProdutosJson
+from infrastructure.scrapers.americanas import LOJA as AMERICANAS
+from infrastructure.scrapers.americanas import ColetorAmericanas
 from infrastructure.scrapers.kabum import LOJA as KABUM
 from infrastructure.scrapers.kabum import ColetorKabum
 
@@ -35,6 +37,7 @@ ARQUIVO_PADRAO = Path(__file__).resolve().parent.parent / "produtos.json"
 FabricaDeColetor = Callable[[list[str]], ColetorDePrecos]
 FABRICAS_DE_COLETOR: dict[str, FabricaDeColetor] = {
     KABUM: lambda urls: ColetorKabum(urls=urls),
+    AMERICANAS: lambda urls: ColetorAmericanas(urls=urls),
 }
 
 

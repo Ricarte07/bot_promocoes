@@ -7,9 +7,13 @@ from domain.preco import Preco
 
 @dataclass(frozen=True)
 class PrecoColetado:
+    """Um preço visto numa loja, com o que a notificação precisa: nome e link do produto."""
+
     produto_id: str
     loja: str
     preco: Preco
+    nome: str = ""
+    url: str = ""
 
 
 @dataclass(frozen=True)

@@ -91,6 +91,8 @@ def test_coleta_produto_em_estoque_com_loja_kabum():
     assert itens[0].produto_id == "415807"
     assert itens[0].loja == LOJA == "kabum"
     assert itens[0].preco.valor == Decimal("1569.99")
+    assert itens[0].nome.startswith("Water Cooler NZXT Kraken Elite 240")
+    assert itens[0].url == URL_EM_ESTOQUE
 
 
 def test_ignora_produto_sem_estoque():

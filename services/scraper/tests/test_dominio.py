@@ -7,7 +7,13 @@ from domain.preco import Preco
 
 
 def nova_oferta():
-    return Oferta("notebook-x", "loja-a", Preco(Decimal("1000")))
+    return Oferta(
+        "notebook-x",
+        "loja-a",
+        Preco(Decimal("1000")),
+        nome="Notebook X",
+        url="https://loja-a.com/notebook-x",
+    )
 
 
 def test_preco_nao_aceita_zero():
@@ -25,6 +31,8 @@ def test_detecta_promocao_com_desconto_suficiente():
     eventos = oferta.coletar_eventos()
     assert len(eventos) == 1
     assert eventos[0].desconto_percentual == Decimal("20.00")
+    assert eventos[0].nome == "Notebook X"
+    assert eventos[0].url == "https://loja-a.com/notebook-x"
 
 
 def test_ignora_desconto_pequeno():

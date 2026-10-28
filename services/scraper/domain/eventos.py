@@ -10,4 +10,6 @@ class PromocaoDetectada:
     preco_atual: Decimal
     preco_referencia: Decimal
     desconto_percentual: Decimal
+    nome: str = ""
+    url: str = ""
     ocorrido_em: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
