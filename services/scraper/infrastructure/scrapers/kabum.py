@@ -1,51 +1,32 @@
 """Adaptador da loja Kabum para a porta ColetorDePrecos.
 
-Duas responsabilidades separadas de propósito:
-- extrair_produto(html): função pura, sem rede, testável com um HTML de exemplo.
-- baixar_html(url): a única parte que fala com a internet.
+A página de produto da Kabum é Next.js e embute um JSON __NEXT_DATA__ com
+todos os dados do produto. extrair_produto(html) lê só esse bloco: é uma
+função pura, sem rede, testável com um HTML de exemplo.
 
-ColetorKabum junta as duas e recebe a função de download no construtor,
-para que os testes possam injetar uma versão falsa.
+O laço de URLs, o intervalo entre requisições e o tratamento de erro vêm de
+ColetorPorUrls (infrastructure/scrapers/base.py).
 """
 
 import json
-import logging
 import re
-import time
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Callable, Optional
 
-import requests
+from infrastructure.scrapers.base import ColetorPorUrls, PaginaInvalida, ProdutoExtraido
 
-from application.portas import ColetorDePrecos, PrecoColetado
-from domain.preco import Preco
+__all__ = ["LOJA", "ColetorKabum", "PaginaInvalida", "ProdutoKabum", "extrair_produto"]
 
 LOJA = "kabum"
 
-_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-)
 _PADRAO_NEXT_DATA = re.compile(
     r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', re.S
 )
 
-logger = logging.getLogger(__name__)
-
-
-class PaginaInvalida(ValueError):
-    """O HTML recebido não tem o formato esperado de uma página de produto da Kabum."""
-
 
 @dataclass(frozen=True)
-class ProdutoKabum:
-    """Dados crus de um produto, como a Kabum os entrega. Ainda não é domínio."""
-
-    produto_id: str
-    nome: str
-    preco_avista: Decimal
-    disponivel: bool
+class ProdutoKabum(ProdutoExtraido):
+    """Dados crus de um produto, como a Kabum os entrega."""
 
 
 def extrair_produto(html: str) -> ProdutoKabum:
@@ -77,62 +58,14 @@ def extrair_produto(html: str) -> ProdutoKabum:
     )
 
 
-def baixar_html(url: str, timeout: float = 15.0) -> str:
-    """Faz uma única requisição HTTP e devolve o HTML como texto."""
-    resposta = requests.get(url, headers={"User-Agent": _USER_AGENT}, timeout=timeout)
-    resposta.raise_for_status()
-    return resposta.text
-
-
-class ColetorKabum(ColetorDePrecos):
+class ColetorKabum(ColetorPorUrls):
     """Monitora uma lista fixa de URLs de produto da Kabum.
 
     O robots.txt da loja permite /produto/..., mas proíbe a busca com parâmetros,
     por isso não varremos a loja: só visitamos os produtos escolhidos.
     """
 
-    def __init__(
-        self,
-        urls: list[str],
-        baixar: Callable[[str], str] = baixar_html,
-        intervalo_segundos: float = 2.0,
-        esperar: Callable[[float], None] = time.sleep,
-    ):
-        self.urls = list(urls)
-        self._baixar = baixar
-        self._intervalo = intervalo_segundos
-        self._esperar = esperar
+    loja = LOJA
 
-    def coletar(self) -> list[PrecoColetado]:
-        coletados: list[PrecoColetado] = []
-
-        for posicao, url in enumerate(self.urls):
-            if posicao > 0 and self._intervalo > 0:
-                self._esperar(self._intervalo)
-
-            item = self._coletar_um(url)
-            if item is not None:
-                coletados.append(item)
-
-        return coletados
-
-    def _coletar_um(self, url: str) -> Optional[PrecoColetado]:
-        try:
-            produto = extrair_produto(self._baixar(url))
-        except (requests.RequestException, PaginaInvalida) as erro:
-            # Uma página com problema não pode derrubar a rodada inteira.
-            logger.warning("Kabum: falha ao coletar %s: %s", url, erro)
-            return None
-
-        if not produto.disponivel:
-            logger.info("Kabum: produto %s sem estoque, ignorado", produto.produto_id)
-            return None
-
-        logger.info(
-            "Kabum: produto %s a R$ %s (%s)", produto.produto_id, produto.preco_avista, produto.nome[:50]
-        )
-        return PrecoColetado(
-            produto_id=produto.produto_id,
-            loja=LOJA,
-            preco=Preco(produto.preco_avista),
-        )
+    def extrair(self, html: str) -> ProdutoKabum:
+        return extrair_produto(html)

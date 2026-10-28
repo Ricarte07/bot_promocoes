@@ -3,6 +3,7 @@
 Formato esperado do arquivo:
 [
   {"loja": "kabum", "url": "https://www.kabum.com.br/produto/415807/..."},
+  {"loja": "americanas", "url": "https://www.americanas.com.br/impressora-epson-...-8776497/p"},
   ...
 ]
 """
