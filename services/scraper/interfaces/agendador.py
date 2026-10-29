@@ -4,10 +4,14 @@ Uso, dentro de services/scraper com o .venv ativo:
     python -m interfaces.agendador                      # roda para sempre, a cada 30 min
     python -m interfaces.agendador --uma-vez            # roda uma rodada e sai
     python -m interfaces.agendador --intervalo-minutos 5
+
+Sem REDIS_URL no ambiente (ou --redis-url), as promoções só aparecem no console.
+Com ele, vão para o stream `promocoes` do Redis, de onde o notifier as lê.
 """
 
 import argparse
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Callable, Optional
@@ -22,6 +26,7 @@ from application.portas import (
 from application.processar_coleta import ProcessarColeta
 from domain.repositorios import OfertaRepositorio
 from infrastructure.mensageria.console import PublicadorNoConsole
+from infrastructure.mensageria.redis_streams import PublicadorRedis
 from infrastructure.persistencia.memoria import OfertaRepositorioEmMemoria
 from infrastructure.persistencia.produtos_json import FonteDeProdutosJson
 from infrastructure.scrapers.americanas import LOJA as AMERICANAS
@@ -87,6 +92,20 @@ def executar_rodada(
     return caso_de_uso.executar()
 
 
+def montar_publicador(redis_url: Optional[str]) -> PublicadorDeEventos:
+    """Redis quando há URL configurada; console caso contrário."""
+    if not redis_url:
+        logger.info("REDIS_URL não definida: promoções serão impressas no console")
+        return PublicadorNoConsole()
+
+    import redis  # importado aqui para que o console funcione mesmo sem o pacote
+
+    cliente = redis.from_url(redis_url, decode_responses=True)
+    cliente.ping()  # falha já na partida se o Redis não estiver acessível
+    logger.info("Publicando promoções no Redis em %s", redis_url)
+    return PublicadorRedis(cliente)
+
+
 def main(argumentos: Optional[list[str]] = None) -> None:
     parser = argparse.ArgumentParser(description="Agendador do scraper de promoções")
     parser.add_argument(
@@ -96,6 +115,11 @@ def main(argumentos: Optional[list[str]] = None) -> None:
         "--intervalo-minutos", type=float, default=30, help="tempo entre rodadas"
     )
     parser.add_argument("--uma-vez", action="store_true", help="roda uma rodada e sai")
+    parser.add_argument(
+        "--redis-url",
+        default=os.environ.get("REDIS_URL"),
+        help="endereço do Redis (padrão: variável REDIS_URL; vazio usa o console)",
+    )
     opcoes = parser.parse_args(argumentos)
 
     logging.basicConfig(
@@ -104,7 +128,7 @@ def main(argumentos: Optional[list[str]] = None) -> None:
 
     fonte = FonteDeProdutosJson(opcoes.produtos)
     repositorio = OfertaRepositorioEmMemoria()  # histórico vive só enquanto o processo roda
-    publicador = PublicadorNoConsole()
+    publicador = montar_publicador(opcoes.redis_url)
 
     while True:
         publicadas = executar_rodada(fonte, repositorio, publicador)

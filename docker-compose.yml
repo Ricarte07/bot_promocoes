@@ -1,0 +1,18 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: promo-redis
+    ports:
+      - "6379:6379"
+    # Persiste o stream em disco para sobreviver a um restart do container.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-dados:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis-dados:

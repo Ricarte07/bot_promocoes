@@ -10,7 +10,8 @@ from domain.eventos import PromocaoDetectada
 from domain.preco import Preco
 from infrastructure.mensageria.console import PublicadorNoConsole
 from infrastructure.persistencia.memoria import OfertaRepositorioEmMemoria
-from interfaces.agendador import executar_rodada, montar_coletor
+from infrastructure.mensageria.redis_streams import PublicadorRedis
+from interfaces.agendador import executar_rodada, montar_coletor, montar_publicador
 
 
 class ColetorFalso(ColetorDePrecos):
@@ -97,3 +98,27 @@ def test_mensagem_no_console_mostra_nome_e_link():
         "[PROMOÇÃO] kabum | Notebook X | de R$ 1000 por R$ 800 (20.00% de desconto) "
         "https://www.kabum.com.br/produto/1/notebook-x"
     ]
+
+
+def test_sem_redis_url_publica_no_console():
+    assert isinstance(montar_publicador(None), PublicadorNoConsole)
+    assert isinstance(montar_publicador(""), PublicadorNoConsole)
+
+
+def test_com_redis_url_publica_no_redis(monkeypatch):
+    class RedisFalso:
+        def __init__(self):
+            self.pingou = False
+
+        def ping(self):
+            self.pingou = True
+
+    import redis
+
+    falso = RedisFalso()
+    monkeypatch.setattr(redis, "from_url", lambda url, **_: falso)
+
+    publicador = montar_publicador("redis://localhost:6379/0")
+
+    assert isinstance(publicador, PublicadorRedis)
+    assert falso.pingou is True
