@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from application.portas import (
+    TIPO_LISTAGEM,
+    TIPO_PRODUTO,
     ColetorDePrecos,
     FonteDeProdutosMonitorados,
     PrecoColetado,
@@ -34,17 +36,20 @@ from infrastructure.scrapers.americanas import LOJA as AMERICANAS
 from infrastructure.scrapers.americanas import ColetorAmericanas
 from infrastructure.scrapers.kabum import LOJA as KABUM
 from infrastructure.scrapers.kabum import ColetorKabum
+from infrastructure.scrapers.kabum_listagem import ColetorListagemKabum
 
 logger = logging.getLogger(__name__)
 
 ARQUIVO_PADRAO = Path(__file__).resolve().parent.parent / "produtos.json"
 ENV_PADRAO = Path(__file__).resolve().parent.parent.parent.parent / ".env"
 
-# Para adicionar uma loja: escreva o adaptador em infrastructure/scrapers e registre aqui.
-FabricaDeColetor = Callable[[list[str]], ColetorDePrecos]
-FABRICAS_DE_COLETOR: dict[str, FabricaDeColetor] = {
-    KABUM: lambda urls: ColetorKabum(urls=urls),
-    AMERICANAS: lambda urls: ColetorAmericanas(urls=urls),
+# Para adicionar uma loja: escreva o adaptador em infrastructure/scrapers e registre aqui,
+# pela chave (loja, tipo). Uma loja pode ter coletor de produto avulso, de listagem ou os dois.
+FabricaDeColetor = Callable[[list[ProdutoMonitorado]], ColetorDePrecos]
+FABRICAS_DE_COLETOR: dict[tuple[str, str], FabricaDeColetor] = {
+    (KABUM, TIPO_PRODUTO): lambda itens: ColetorKabum(urls=[item.url for item in itens]),
+    (KABUM, TIPO_LISTAGEM): lambda itens: ColetorListagemKabum(listagens=itens),
+    (AMERICANAS, TIPO_PRODUTO): lambda itens: ColetorAmericanas(urls=[item.url for item in itens]),
 }
 
 
@@ -63,20 +68,22 @@ class ColetorComposto(ColetorDePrecos):
 
 def montar_coletor(
     produtos: list[ProdutoMonitorado],
-    fabricas: dict[str, FabricaDeColetor] = FABRICAS_DE_COLETOR,
+    fabricas: dict[tuple[str, str], FabricaDeColetor] = FABRICAS_DE_COLETOR,
 ) -> ColetorComposto:
-    """Agrupa as URLs por loja e cria um coletor para cada loja conhecida."""
-    urls_por_loja: dict[str, list[str]] = {}
+    """Agrupa os itens por (loja, tipo) e cria um coletor para cada grupo conhecido."""
+    grupos: dict[tuple[str, str], list[ProdutoMonitorado]] = {}
     for produto in produtos:
-        urls_por_loja.setdefault(produto.loja, []).append(produto.url)
+        grupos.setdefault((produto.loja, produto.tipo), []).append(produto)
 
     coletores: list[ColetorDePrecos] = []
-    for loja, urls in urls_por_loja.items():
-        fabrica = fabricas.get(loja)
+    for (loja, tipo), itens in grupos.items():
+        fabrica = fabricas.get((loja, tipo))
         if fabrica is None:
-            logger.warning("Loja '%s' não tem scraper; %d produto(s) ignorado(s)", loja, len(urls))
+            logger.warning(
+                "Loja '%s' não tem scraper de %s; %d item(ns) ignorado(s)", loja, tipo, len(itens)
+            )
             continue
-        coletores.append(fabrica(urls))
+        coletores.append(fabrica(itens))
 
     return ColetorComposto(coletores)
 
@@ -85,7 +92,7 @@ def executar_rodada(
     fonte: FonteDeProdutosMonitorados,
     repositorio: OfertaRepositorio,
     publicador: PublicadorDeEventos,
-    fabricas: dict[str, FabricaDeColetor] = FABRICAS_DE_COLETOR,
+    fabricas: dict[tuple[str, str], FabricaDeColetor] = FABRICAS_DE_COLETOR,
 ) -> int:
     """Uma rodada completa: lê a lista, coleta, processa e devolve quantas promoções saíram."""
     produtos = fonte.listar()

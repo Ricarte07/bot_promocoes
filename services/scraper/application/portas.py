@@ -20,12 +20,24 @@ class PrecoColetado:
     preco_de: Optional[Preco] = None  # preço "de" que a loja anuncia, se houver
 
 
+TIPO_PRODUTO = "produto"
+TIPO_LISTAGEM = "listagem"
+
+
 @dataclass(frozen=True)
 class ProdutoMonitorado:
-    """Um endereço a visitar: em qual loja e em qual URL está o produto."""
+    """Um endereço a visitar numa loja.
+
+    tipo "produto": a URL é a página de um único produto.
+    tipo "listagem": a URL é uma página de categoria ou de ofertas, e todos os
+    produtos dela entram no monitoramento. paginas diz quantas páginas da
+    listagem seguir (só vale para listagens).
+    """
 
     loja: str
     url: str
+    tipo: str = TIPO_PRODUTO
+    paginas: int = 1
 
 
 class ColetorDePrecos(ABC):

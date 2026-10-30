@@ -46,7 +46,6 @@ dois lados e na versão do evento.
 | `ocorrido_em`         | string         | RFC 3339 em UTC, com fração de segundo e offset `+00:00`.             |
 
 ## Mudanças por versão
-
 - **2**: `preco_final` e `cupom`. `preco_referencia` passou a poder ser o
   preço "de" da loja, não só o primeiro preço visto.
 - **1**: formato inicial.

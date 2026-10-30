@@ -23,9 +23,9 @@ from interfaces.agendador import (
 class ColetorFalso(ColetorDePrecos):
     """Finge ser o scraper de uma loja: devolve um preço fixo para cada URL recebida."""
 
-    def __init__(self, loja: str, urls: list[str], valor: str):
+    def __init__(self, loja: str, itens: list[ProdutoMonitorado], valor: str):
         self.loja = loja
-        self.urls = urls
+        self.urls = [item.url for item in itens]
         self.valor = valor
 
     def coletar(self):
@@ -42,8 +42,9 @@ class FonteFalsa(FonteDeProdutosMonitorados):
 
 def fabricas_com_preco(valor: str):
     return {
-        "kabum": lambda urls: ColetorFalso("kabum", urls, valor),
-        "outra": lambda urls: ColetorFalso("outra", urls, valor),
+        ("kabum", "produto"): lambda itens: ColetorFalso("kabum", itens, valor),
+        ("kabum", "listagem"): lambda itens: ColetorFalso("kabum-listagem", itens, valor),
+        ("outra", "produto"): lambda itens: ColetorFalso("outra", itens, valor),
     }
 
 
@@ -67,6 +68,19 @@ def test_loja_sem_scraper_e_ignorada_sem_quebrar():
 
     assert [c.loja for c in composto.coletores] == ["kabum"]
     assert [item.produto_id for item in composto.coletar()] == ["k1"]
+
+
+def test_produto_e_listagem_da_mesma_loja_vao_para_coletores_diferentes():
+    produtos = [
+        ProdutoMonitorado("kabum", "k1"),
+        ProdutoMonitorado("kabum", "cat1", tipo="listagem", paginas=2),
+        ProdutoMonitorado("outra", "o1", tipo="listagem"),  # 'outra' só tem coletor de produto
+    ]
+
+    composto = montar_coletor(produtos, fabricas_com_preco("100"))
+
+    por_loja = {c.loja: c.urls for c in composto.coletores}
+    assert por_loja == {"kabum": ["k1"], "kabum-listagem": ["cat1"]}
 
 
 def test_rodada_completa_publica_promocao_na_segunda_coleta():
