@@ -10,15 +10,28 @@ import (
 	"time"
 )
 
+// Cupom é o cupom anunciado na página do produto. Codigo vazio significa
+// "sem cupom". DescontoPercentual vazio significa que a loja mostra o
+// código mas não diz quanto ele desconta.
+type Cupom struct {
+	Codigo             string
+	DescontoPercentual string // ex.: "5.00"; vazio quando desconhecido
+}
+
+func (c Cupom) Existe() bool         { return c.Codigo != "" }
+func (c Cupom) ValorConhecido() bool { return c.DescontoPercentual != "" }
+
 // Promocao é uma queda de preço detectada pelo scraper em uma loja.
 type Promocao struct {
 	ProdutoID          string
 	Loja               string
 	Nome               string // pode vir vazio; use ProdutoID como fallback ao exibir
 	URL                string // pode vir vazio
-	PrecoAtual         string // decimal com ponto, ex.: "901.55"
-	PrecoReferencia    string
-	DescontoPercentual string // ex.: "18.04"
+	PrecoAtual         string // preço "por" da página, sem cupom, ex.: "279.99"
+	PrecoFinal         string // o que o comprador paga, com cupom aplicado
+	PrecoReferencia    string // base do desconto: "de" da loja ou primeiro preço visto
+	DescontoPercentual string // ex.: "29.59"
+	Cupom              Cupom
 	OcorridoEm         time.Time
 }
 
@@ -33,6 +46,8 @@ func (p Promocao) Validar() error {
 		return errors.Join(ErrPromocaoInvalida, errors.New("loja vazia"))
 	case p.PrecoAtual == "":
 		return errors.Join(ErrPromocaoInvalida, errors.New("preco_atual vazio"))
+	case p.PrecoFinal == "":
+		return errors.Join(ErrPromocaoInvalida, errors.New("preco_final vazio"))
 	case p.PrecoReferencia == "":
 		return errors.Join(ErrPromocaoInvalida, errors.New("preco_referencia vazio"))
 	}

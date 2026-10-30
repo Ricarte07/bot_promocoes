@@ -124,6 +124,7 @@ func enviarTeste(ctx context.Context, notificador application.Notificador) error
 		Loja:               "notifier",
 		Nome:               "Mensagem de teste: o notifier está conectado ao Telegram",
 		PrecoAtual:         "80.00",
+		PrecoFinal:         "80.00",
 		PrecoReferencia:    "100.00",
 		DescontoPercentual: "20.00",
 		OcorridoEm:         time.Now(),
