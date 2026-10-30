@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from application.portas import ColetorDePrecos, PrecoColetado, PublicadorDeEventos
 from application.processar_coleta import ProcessarColeta
+from domain.cupom import Cupom
 from domain.preco import Preco
 from infrastructure.persistencia.memoria import OfertaRepositorioEmMemoria
 
@@ -29,13 +30,14 @@ def montar():
     return coletor, publicador, caso_de_uso
 
 
-def item(valor):
+def item(valor, cupom=None):
     return PrecoColetado(
         "notebook-x",
         "loja-a",
         Preco(Decimal(valor)),
         nome="Notebook X",
         url="https://loja-a.com/notebook-x",
+        cupom=cupom,
     )
 
 
@@ -65,3 +67,15 @@ def test_queda_pequena_nao_publica():
     coletor.precos = [item("950")]
     assert caso_de_uso.executar() == 0
     assert publicador.publicados == []
+
+
+def test_cupom_coletado_chega_ao_evento():
+    coletor, publicador, caso_de_uso = montar()
+    coletor.precos = [item("1000")]
+    caso_de_uso.executar()
+    coletor.precos = [item("1000", Cupom("QUINZE", Decimal("15")))]
+
+    assert caso_de_uso.executar() == 1
+    evento = publicador.publicados[0]
+    assert evento.cupom == Cupom("QUINZE", Decimal("15"))
+    assert evento.preco_final == Decimal("850.00")

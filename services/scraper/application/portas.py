@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Optional
 
+from domain.cupom import Cupom
 from domain.eventos import PromocaoDetectada
 from domain.preco import Preco
 
@@ -14,6 +16,7 @@ class PrecoColetado:
     preco: Preco
     nome: str = ""
     url: str = ""
+    cupom: Optional[Cupom] = None  # cupom anunciado na página, se houver
 
 
 @dataclass(frozen=True)
