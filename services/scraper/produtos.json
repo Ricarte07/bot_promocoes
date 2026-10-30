@@ -2,5 +2,6 @@
   {"loja": "kabum", "url": "https://www.kabum.com.br/produto/415807/water-cooler-nzxt-kraken-elite-240-rgb-240mm-amd-intel-preto-rl-kr24e-b1"},
   {"loja": "kabum", "url": "https://www.kabum.com.br/produto/725571/fonte-gamer-rise-mode-elektra-650w-bronze-full-modular-pfc-ativo-preto-rm-psu-elkm-650-b"},
   {"loja": "kabum", "url": "https://www.kabum.com.br/produto/694714/placa-de-video-asrock-rx-9070-challenger-amd-radeon-led-16gb-gddr6-fidelityfx-rdna-90-ga5nzz-00uanf"},
-  {"loja": "americanas", "url": "https://www.americanas.com.br/impressora-epson-ecotank-l1250-tanque-de-tinta-wi-fi-usb-8297500-8776497/p"}
+  {"loja": "americanas", "url": "https://www.americanas.com.br/impressora-epson-ecotank-l1250-tanque-de-tinta-wi-fi-usb-8297500-8776497/p"},
+  {"loja": "kabum", "listagem": "https://www.kabum.com.br/hardware/placa-de-video-vga", "paginas": 1}
 ]

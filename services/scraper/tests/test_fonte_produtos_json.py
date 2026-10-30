@@ -45,3 +45,30 @@ def test_item_sem_url_e_invalido(tmp_path):
 def test_raiz_que_nao_e_lista_e_invalida(tmp_path):
     with pytest.raises(ArquivoDeProdutosInvalido):
         FonteDeProdutosJson(escrever(tmp_path, '{"loja": "kabum", "url": "x"}')).listar()
+
+
+def test_le_listagem_com_paginas(tmp_path):
+    arquivo = escrever(
+        tmp_path,
+        '[{"loja": "kabum", "listagem": "https://www.kabum.com.br/hardware/placa-de-video-vga", "paginas": 2},'
+        ' {"loja": "kabum", "listagem": "https://www.kabum.com.br/hardware/fontes"}]',
+    )
+
+    produtos = FonteDeProdutosJson(arquivo).listar()
+
+    assert produtos == [
+        ProdutoMonitorado("kabum", "https://www.kabum.com.br/hardware/placa-de-video-vga", tipo="listagem", paginas=2),
+        ProdutoMonitorado("kabum", "https://www.kabum.com.br/hardware/fontes", tipo="listagem", paginas=1),
+    ]
+
+
+def test_paginas_invalidas_e_erro(tmp_path):
+    with pytest.raises(ArquivoDeProdutosInvalido):
+        FonteDeProdutosJson(escrever(tmp_path, '[{"loja": "kabum", "listagem": "x", "paginas": 0}]')).listar()
+    with pytest.raises(ArquivoDeProdutosInvalido):
+        FonteDeProdutosJson(escrever(tmp_path, '[{"loja": "kabum", "listagem": "x", "paginas": "2"}]')).listar()
+
+
+def test_item_sem_url_nem_listagem_e_invalido(tmp_path):
+    with pytest.raises(ArquivoDeProdutosInvalido):
+        FonteDeProdutosJson(escrever(tmp_path, '[{"loja": "kabum", "paginas": 2}]')).listar()

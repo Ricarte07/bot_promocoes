@@ -17,7 +17,15 @@ from typing import Any, Optional
 from domain.cupom import Cupom
 from infrastructure.scrapers.base import ColetorPorUrls, PaginaInvalida, ProdutoExtraido
 
-__all__ = ["LOJA", "ColetorKabum", "PaginaInvalida", "ProdutoKabum", "extrair_produto"]
+__all__ = [
+    "LOJA",
+    "ColetorKabum",
+    "PaginaInvalida",
+    "ProdutoKabum",
+    "extrair_cupom",
+    "extrair_produto",
+    "ler_preco_de",
+]
 
 LOJA = "kabum"
 
@@ -60,12 +68,12 @@ def extrair_produto(html: str) -> ProdutoKabum:
         nome=produto.get("title") or "",
         preco_avista=Decimal(preco_avista),
         disponivel=bool(produto.get("available")),
-        cupom=_extrair_cupom(produto.get("stamps")),
-        preco_de=_preco_de(precos.get("oldPrice")),
+        cupom=extrair_cupom(produto.get("stamps")),
+        preco_de=ler_preco_de(precos.get("oldPrice")),
     )
 
 
-def _preco_de(valor: Any) -> Optional[Decimal]:
+def ler_preco_de(valor: Any) -> Optional[Decimal]:
     """O "de" da Kabum é prices.oldPrice; vem 0 quando não há desconto anunciado."""
     if valor is None:
         return None
@@ -73,7 +81,7 @@ def _preco_de(valor: Any) -> Optional[Decimal]:
     return preco if preco > 0 else None
 
 
-def _extrair_cupom(selo: Any) -> Optional[Cupom]:
+def extrair_cupom(selo: Any) -> Optional[Cupom]:
     """Lê o selo (stamps) que a Kabum mostra na página quando há cupom para o item.
 
     Selos de outro tipo, sem a palavra "cupom", são ignorados. Se o texto

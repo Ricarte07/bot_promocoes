@@ -99,25 +99,33 @@ class ColetorPorUrls(ColetorDePrecos):
             # Uma página com problema não pode derrubar a rodada inteira.
             logger.warning("%s: falha ao coletar %s: %s", self.loja, url, erro)
             return None
+        return converter(produto, url, self.loja)
 
-        if not produto.disponivel:
-            logger.info("%s: produto %s sem estoque, ignorado", self.loja, produto.produto_id)
-            return None
 
-        logger.info(
-            "%s: produto %s a R$ %s (%s)%s",
-            self.loja,
-            produto.produto_id,
-            produto.preco_avista,
-            produto.nome[:50],
-            f" cupom {produto.cupom.codigo}" if produto.cupom else "",
-        )
-        return PrecoColetado(
-            produto_id=produto.produto_id,
-            loja=self.loja,
-            preco=Preco(produto.preco_avista),
-            nome=produto.nome,
-            url=url,
-            cupom=produto.cupom,
-            preco_de=Preco(produto.preco_de) if produto.preco_de else None,
-        )
+def converter(produto: ProdutoExtraido, url: str, loja: str) -> Optional[PrecoColetado]:
+    """Transforma o produto cru em PrecoColetado; produto sem estoque vira None.
+
+    Compartilhada entre os coletores de produto e de listagem, para que o log e
+    as regras de conversão sejam os mesmos.
+    """
+    if not produto.disponivel:
+        logger.info("%s: produto %s sem estoque, ignorado", loja, produto.produto_id)
+        return None
+
+    logger.info(
+        "%s: produto %s a R$ %s (%s)%s",
+        loja,
+        produto.produto_id,
+        produto.preco_avista,
+        produto.nome[:50],
+        f" cupom {produto.cupom.codigo}" if produto.cupom else "",
+    )
+    return PrecoColetado(
+        produto_id=produto.produto_id,
+        loja=loja,
+        preco=Preco(produto.preco_avista),
+        nome=produto.nome,
+        url=url,
+        cupom=produto.cupom,
+        preco_de=Preco(produto.preco_de) if produto.preco_de else None,
+    )
