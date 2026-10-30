@@ -12,7 +12,9 @@ import json
 import re
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Any, Optional
 
+from domain.cupom import Cupom
 from infrastructure.scrapers.base import ColetorPorUrls, PaginaInvalida, ProdutoExtraido
 
 __all__ = ["LOJA", "ColetorKabum", "PaginaInvalida", "ProdutoKabum", "extrair_produto"]
@@ -22,6 +24,9 @@ LOJA = "kabum"
 _PADRAO_NEXT_DATA = re.compile(
     r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', re.S
 )
+# Selo de cupom: título "CUPOM ESQUENTA", descrição "Use o cupom ESQUENTA e ganhe 5% OFF neste item".
+_PADRAO_CODIGO_CUPOM = re.compile(r"\bcupom\s+([A-Z0-9][A-Z0-9_-]*)", re.I)
+_PADRAO_PERCENTUAL_OFF = re.compile(r"(\d+(?:[.,]\d+)?)\s*%\s*OFF", re.I)
 
 
 @dataclass(frozen=True)
@@ -55,7 +60,32 @@ def extrair_produto(html: str) -> ProdutoKabum:
         nome=produto.get("title") or "",
         preco_avista=Decimal(preco_avista),
         disponivel=bool(produto.get("available")),
+        cupom=_extrair_cupom(produto.get("stamps")),
     )
+
+
+def _extrair_cupom(selo: Any) -> Optional[Cupom]:
+    """Lê o selo (stamps) que a Kabum mostra na página quando há cupom para o item.
+
+    Selos de outro tipo, sem a palavra "cupom", são ignorados. Se o texto
+    anuncia o código mas não a porcentagem, o cupom fica sem valor conhecido.
+    """
+    if not isinstance(selo, dict):
+        return None
+
+    texto = f"{selo.get('title') or ''} {selo.get('description') or ''}"
+    codigo = _PADRAO_CODIGO_CUPOM.search(texto)
+    if codigo is None:
+        return None
+
+    desconto = None
+    percentual = _PADRAO_PERCENTUAL_OFF.search(texto)
+    if percentual is not None:
+        valor = Decimal(percentual.group(1).replace(",", "."))
+        if 0 < valor < 100:
+            desconto = valor
+
+    return Cupom(codigo.group(1).upper(), desconto)
 
 
 class ColetorKabum(ColetorPorUrls):

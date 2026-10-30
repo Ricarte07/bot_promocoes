@@ -13,13 +13,14 @@ Para adicionar uma loja:
 import logging
 import time
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Callable, Optional
 
 import requests
 
 from application.portas import ColetorDePrecos, PrecoColetado
+from domain.cupom import Cupom
 from domain.preco import Preco
 
 _USER_AGENT = (
@@ -42,6 +43,7 @@ class ProdutoExtraido:
     nome: str
     preco_avista: Decimal
     disponivel: bool
+    cupom: Optional[Cupom] = field(default=None, kw_only=True)  # anunciado na página, se houver
 
 
 def baixar_html(url: str, timeout: float = 15.0) -> str:
@@ -102,11 +104,12 @@ class ColetorPorUrls(ColetorDePrecos):
             return None
 
         logger.info(
-            "%s: produto %s a R$ %s (%s)",
+            "%s: produto %s a R$ %s (%s)%s",
             self.loja,
             produto.produto_id,
             produto.preco_avista,
             produto.nome[:50],
+            f" cupom {produto.cupom.codigo}" if produto.cupom else "",
         )
         return PrecoColetado(
             produto_id=produto.produto_id,
@@ -114,4 +117,5 @@ class ColetorPorUrls(ColetorDePrecos):
             preco=Preco(produto.preco_avista),
             nome=produto.nome,
             url=url,
+            cupom=produto.cupom,
         )
