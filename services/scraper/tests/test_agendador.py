@@ -12,7 +12,12 @@ from domain.preco import Preco
 from infrastructure.mensageria.console import PublicadorNoConsole
 from infrastructure.persistencia.memoria import OfertaRepositorioEmMemoria
 from infrastructure.mensageria.redis_streams import PublicadorRedis
-from interfaces.agendador import executar_rodada, montar_coletor, montar_publicador
+from interfaces.agendador import (
+    carregar_dotenv,
+    executar_rodada,
+    montar_coletor,
+    montar_publicador,
+)
 
 
 class ColetorFalso(ColetorDePrecos):
@@ -145,3 +150,43 @@ def test_mensagem_no_console_mostra_cupom_e_preco_final():
         "[PROMOÇÃO] kabum | Notebook X | de R$ 1000 por R$ 850.00 com o cupom QUINZE "
         "(15.00% de desconto)"
     ]
+
+
+# --- .env -----------------------------------------------------------------------
+
+
+def test_dotenv_define_variaveis_que_nao_existem(tmp_path, monkeypatch):
+    monkeypatch.delenv("TESTE_REDIS_URL", raising=False)
+    monkeypatch.delenv("TESTE_TOKEN", raising=False)
+    env = tmp_path / ".env"
+    env.write_text(
+        "# comentário\n"
+        "TESTE_REDIS_URL=redis://localhost:6379/0\n"
+        'TESTE_TOKEN="abc:123"\n'
+        "\n"
+        "linha sem igual\n",
+        encoding="utf-8",
+    )
+
+    carregar_dotenv(env)
+
+    import os
+
+    assert os.environ["TESTE_REDIS_URL"] == "redis://localhost:6379/0"
+    assert os.environ["TESTE_TOKEN"] == "abc:123"  # aspas removidas
+
+
+def test_dotenv_nao_sobrescreve_variavel_ja_definida(tmp_path, monkeypatch):
+    monkeypatch.setenv("TESTE_REDIS_URL", "redis://ja-definida:6379/0")
+    env = tmp_path / ".env"
+    env.write_text("TESTE_REDIS_URL=redis://do-arquivo:6379/0\n", encoding="utf-8")
+
+    carregar_dotenv(env)
+
+    import os
+
+    assert os.environ["TESTE_REDIS_URL"] == "redis://ja-definida:6379/0"
+
+
+def test_dotenv_inexistente_nao_e_erro(tmp_path):
+    carregar_dotenv(tmp_path / "nao-existe.env")
