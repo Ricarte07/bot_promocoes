@@ -7,6 +7,7 @@ Uso, dentro de services/scraper com o .venv ativo:
 
 Sem REDIS_URL no ambiente (ou --redis-url), as promoções só aparecem no console.
 Com ele, vão para o stream `promocoes` do Redis, de onde o notifier as lê.
+O .env da raiz do projeto é lido na partida, então basta preenchê-lo uma vez.
 """
 
 import argparse
@@ -37,6 +38,7 @@ from infrastructure.scrapers.kabum import ColetorKabum
 logger = logging.getLogger(__name__)
 
 ARQUIVO_PADRAO = Path(__file__).resolve().parent.parent / "produtos.json"
+ENV_PADRAO = Path(__file__).resolve().parent.parent.parent.parent / ".env"
 
 # Para adicionar uma loja: escreva o adaptador em infrastructure/scrapers e registre aqui.
 FabricaDeColetor = Callable[[list[str]], ColetorDePrecos]
@@ -106,7 +108,27 @@ def montar_publicador(redis_url: Optional[str]) -> PublicadorDeEventos:
     return PublicadorRedis(cliente)
 
 
+def carregar_dotenv(caminho: Path) -> None:
+    """Lê linhas CHAVE=VALOR e define só as variáveis que ainda não existem no ambiente.
+
+    Arquivo inexistente não é erro: em produção a configuração vem do ambiente.
+    """
+    if not caminho.is_file():
+        return
+    for linha in caminho.read_text(encoding="utf-8").splitlines():
+        linha = linha.strip()
+        if not linha or linha.startswith("#") or "=" not in linha:
+            continue
+        chave, valor = linha.split("=", 1)
+        chave = chave.strip()
+        valor = valor.strip().strip("\"'")
+        if chave and chave not in os.environ:
+            os.environ[chave] = valor
+
+
 def main(argumentos: Optional[list[str]] = None) -> None:
+    carregar_dotenv(ENV_PADRAO)  # antes do parser, porque o padrão de --redis-url lê o ambiente
+
     parser = argparse.ArgumentParser(description="Agendador do scraper de promoções")
     parser.add_argument(
         "--produtos", type=Path, default=ARQUIVO_PADRAO, help="arquivo JSON com os produtos"
