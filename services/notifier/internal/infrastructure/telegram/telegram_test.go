@@ -13,26 +13,53 @@ import (
 
 func promocaoExemplo() domain.Promocao {
 	return domain.Promocao{
-		ProdutoID:          "8776497",
-		Loja:               "americanas",
-		Nome:               "Impressora Epson EcoTank L1250 Wi-Fi Bivolt",
-		URL:                "https://www.americanas.com.br/impressora-epson-8776497/p",
-		PrecoAtual:         "901.55",
-		PrecoReferencia:    "1099.90",
-		DescontoPercentual: "18.04",
+		ProdutoID:          "725571",
+		Loja:               "kabum",
+		Nome:               "Fonte Gamer Rise Mode Elektra, 650W",
+		URL:                "https://www.kabum.com.br/produto/725571/fonte-gamer-rise-mode-elektra-650w",
+		PrecoAtual:         "279.99",
+		PrecoFinal:         "265.99",
+		PrecoReferencia:    "377.77",
+		DescontoPercentual: "29.59",
+		Cupom:              domain.Cupom{Codigo: "ESQUENTA", DescontoPercentual: "5.00"},
 	}
 }
 
 // --- FormatarMensagem: função pura ------------------------------------------
 
-func TestMensagemCompleta(t *testing.T) {
-	esperado := "🔥 <b>Promoção na Americanas</b>\n" +
-		"Impressora Epson EcoTank L1250 Wi-Fi Bivolt\n" +
-		"De R$ 1.099,90 por <b>R$ 901,55</b> (18,04% de desconto)\n" +
-		`<a href="https://www.americanas.com.br/impressora-epson-8776497/p">Ver na loja</a>`
+func TestMensagemCompletaComCupom(t *testing.T) {
+	esperado := "🔥 <b>Promoção na Kabum</b>\n" +
+		"Fonte Gamer Rise Mode Elektra, 650W\n" +
+		"De R$ 377,77 por <b>R$ 265,99</b> (29,59% de desconto)\n" +
+		"🎟️ Cupom <code>ESQUENTA</code> (5,00% já aplicado no preço)\n" +
+		`<a href="https://www.kabum.com.br/produto/725571/fonte-gamer-rise-mode-elektra-650w">Ver na loja</a>`
 
 	if obtido := FormatarMensagem(promocaoExemplo()); obtido != esperado {
 		t.Fatalf("mensagem diferente.\nesperado:\n%s\nobtido:\n%s", esperado, obtido)
+	}
+}
+
+func TestMensagemComCupomDeValorDesconhecido(t *testing.T) {
+	p := promocaoExemplo()
+	p.Cupom = domain.Cupom{Codigo: "10DO10"}
+	p.PrecoFinal = p.PrecoAtual
+
+	obtido := FormatarMensagem(p)
+
+	if !strings.Contains(obtido, "por <b>R$ 279,99</b>") {
+		t.Errorf("sem valor do cupom o preço final é o da página: %q", obtido)
+	}
+	if !strings.Contains(obtido, "🎟️ Cupom <code>10DO10</code> na loja (desconto não informado)") {
+		t.Errorf("linha do cupom desconhecido errada: %q", obtido)
+	}
+}
+
+func TestMensagemSemCupomNaoTemLinhaDeCupom(t *testing.T) {
+	p := promocaoExemplo()
+	p.Cupom = domain.Cupom{}
+
+	if obtido := FormatarMensagem(p); strings.Contains(obtido, "Cupom") {
+		t.Errorf("sem cupom não deveria haver linha de cupom: %q", obtido)
 	}
 }
 
@@ -42,7 +69,7 @@ func TestMensagemSemNomeNemURLUsaIdESemLink(t *testing.T) {
 
 	obtido := FormatarMensagem(p)
 
-	if !strings.Contains(obtido, "produto 8776497\n") {
+	if !strings.Contains(obtido, "produto 725571\n") {
 		t.Errorf("deveria usar o id como título: %q", obtido)
 	}
 	if strings.Contains(obtido, "<a ") {
@@ -50,14 +77,18 @@ func TestMensagemSemNomeNemURLUsaIdESemLink(t *testing.T) {
 	}
 }
 
-func TestMensagemEscapaHTMLDoNome(t *testing.T) {
+func TestMensagemEscapaHTMLDoNomeEDoCupom(t *testing.T) {
 	p := promocaoExemplo()
 	p.Nome = `Cabo HDMI <2m> "premium" & cia`
+	p.Cupom.Codigo = "<X>"
 
 	obtido := FormatarMensagem(p)
 
 	if !strings.Contains(obtido, "Cabo HDMI &lt;2m&gt; &#34;premium&#34; &amp; cia") {
 		t.Errorf("nome deveria estar escapado: %q", obtido)
+	}
+	if !strings.Contains(obtido, "<code>&lt;X&gt;</code>") {
+		t.Errorf("código do cupom deveria estar escapado: %q", obtido)
 	}
 }
 
@@ -118,8 +149,8 @@ func TestEnviaSendMessageComTokenChatEHTML(t *testing.T) {
 	if c.corpo["chat_id"] != "-100777" || c.corpo["parse_mode"] != "HTML" {
 		t.Errorf("corpo errado: %+v", c.corpo)
 	}
-	if texto, _ := c.corpo["text"].(string); !strings.Contains(texto, "R$ 901,55") {
-		t.Errorf("texto não tem o preço: %q", texto)
+	if texto, _ := c.corpo["text"].(string); !strings.Contains(texto, "R$ 265,99") {
+		t.Errorf("texto não tem o preço final: %q", texto)
 	}
 }
 

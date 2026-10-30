@@ -7,11 +7,13 @@ arquivo, HTTP) chama serializar_evento e não monta JSON por conta própria.
 
 import json
 from decimal import Decimal
+from typing import Optional
 
+from domain.cupom import Cupom
 from domain.eventos import PromocaoDetectada
 
 TIPO = "promocao_detectada"
-VERSAO = 1
+VERSAO = 2
 
 _DUAS_CASAS = Decimal("0.01")
 
@@ -19,6 +21,17 @@ _DUAS_CASAS = Decimal("0.01")
 def _dinheiro(valor: Decimal) -> str:
     """Decimal com exatamente duas casas e ponto, como "901.55"."""
     return str(valor.quantize(_DUAS_CASAS))
+
+
+def _cupom(cupom: Optional[Cupom]) -> Optional[dict]:
+    if cupom is None:
+        return None
+    return {
+        "codigo": cupom.codigo,
+        "desconto_percentual": (
+            _dinheiro(cupom.desconto_percentual) if cupom.desconto_percentual is not None else None
+        ),
+    }
 
 
 def serializar_evento(evento: PromocaoDetectada) -> str:
@@ -31,8 +44,10 @@ def serializar_evento(evento: PromocaoDetectada) -> str:
         "nome": evento.nome,
         "url": evento.url,
         "preco_atual": _dinheiro(evento.preco_atual),
+        "preco_final": _dinheiro(evento.preco_final),
         "preco_referencia": _dinheiro(evento.preco_referencia),
         "desconto_percentual": _dinheiro(evento.desconto_percentual),
+        "cupom": _cupom(evento.cupom),
         "ocorrido_em": evento.ocorrido_em.isoformat(),
     }
     return json.dumps(dados, ensure_ascii=False)

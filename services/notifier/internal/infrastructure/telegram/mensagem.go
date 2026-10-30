@@ -10,12 +10,17 @@ import (
 
 // FormatarMensagem monta o texto em HTML aceito pelo Telegram.
 //
-// Exemplo:
+// Exemplo, com cupom de valor conhecido:
 //
-//	🔥 <b>Promoção na Americanas</b>
-//	Impressora Epson EcoTank L1250 Wi-Fi Bivolt
-//	De R$ 1.099,90 por <b>R$ 901,55</b> (18,04% de desconto)
+//	🔥 <b>Promoção na Kabum</b>
+//	Fonte Gamer Rise Mode Elektra, 650W
+//	De R$ 377,77 por <b>R$ 265,99</b> (29,59% de desconto)
+//	🎟️ Cupom <code>ESQUENTA</code> (5,00% já aplicado no preço)
 //	<a href="https://...">Ver na loja</a>
+//
+// Quando a loja não informa o valor do cupom, a linha vira
+// "🎟️ Cupom <code>10DO10</code> na loja (desconto não informado)".
+// Sem cupom, a linha não aparece.
 func FormatarMensagem(p domain.Promocao) string {
 	var b strings.Builder
 
@@ -24,14 +29,26 @@ func FormatarMensagem(p domain.Promocao) string {
 	b.WriteString("\n")
 	fmt.Fprintf(&b, "De %s por <b>%s</b> (%s%% de desconto)",
 		formatarReal(p.PrecoReferencia),
-		formatarReal(p.PrecoAtual),
+		formatarReal(p.PrecoFinal),
 		virgulaDecimal(p.DescontoPercentual),
 	)
+	if p.Cupom.Existe() {
+		b.WriteString("\n")
+		b.WriteString(linhaCupom(p.Cupom))
+	}
 	if p.URL != "" {
 		fmt.Fprintf(&b, "\n<a href=\"%s\">Ver na loja</a>", html.EscapeString(p.URL))
 	}
 
 	return b.String()
+}
+
+func linhaCupom(c domain.Cupom) string {
+	codigo := html.EscapeString(c.Codigo)
+	if c.ValorConhecido() {
+		return fmt.Sprintf("🎟️ Cupom <code>%s</code> (%s%% já aplicado no preço)", codigo, virgulaDecimal(c.DescontoPercentual))
+	}
+	return fmt.Sprintf("🎟️ Cupom <code>%s</code> na loja (desconto não informado)", codigo)
 }
 
 // formatarReal converte "1099.90" em "R$ 1.099,90".

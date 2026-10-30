@@ -24,6 +24,7 @@ func promocaoValida() domain.Promocao {
 		Loja:               "americanas",
 		Nome:               "Impressora Epson",
 		PrecoAtual:         "901.55",
+		PrecoFinal:         "901.55",
 		PrecoReferencia:    "1099.90",
 		DescontoPercentual: "18.04",
 	}

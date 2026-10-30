@@ -16,11 +16,12 @@ import (
 )
 
 // Mesmo exemplo de docs/evento-promocao.md e do teste Python test_contrato_evento.py.
-const eventoExemplo = `{"tipo": "promocao_detectada", "versao": 1, "produto_id": "8776497", ` +
-	`"loja": "americanas", "nome": "Impressora Epson EcoTank L1250 Wi-Fi Bivolt", ` +
-	`"url": "https://www.americanas.com.br/impressora-epson-8776497/p", ` +
-	`"preco_atual": "901.55", "preco_referencia": "1099.90", "desconto_percentual": "18.04", ` +
-	`"ocorrido_em": "2026-10-28T13:05:12.345678+00:00"}`
+const eventoExemplo = `{"tipo": "promocao_detectada", "versao": 2, "produto_id": "725571", ` +
+	`"loja": "kabum", "nome": "Fonte Gamer Rise Mode Elektra, 650W, Bronze, Full Modular", ` +
+	`"url": "https://www.kabum.com.br/produto/725571/fonte-gamer-rise-mode-elektra-650w", ` +
+	`"preco_atual": "279.99", "preco_final": "265.99", "preco_referencia": "377.77", ` +
+	`"desconto_percentual": "29.59", "cupom": {"codigo": "ESQUENTA", "desconto_percentual": "5.00"}, ` +
+	`"ocorrido_em": "2026-10-30T17:54:35.380000+00:00"}`
 
 // --- DecodificarEvento: função pura ------------------------------------------
 
@@ -31,14 +32,16 @@ func TestDecodificaEventoDoContrato(t *testing.T) {
 	}
 
 	esperado := domain.Promocao{
-		ProdutoID:          "8776497",
-		Loja:               "americanas",
-		Nome:               "Impressora Epson EcoTank L1250 Wi-Fi Bivolt",
-		URL:                "https://www.americanas.com.br/impressora-epson-8776497/p",
-		PrecoAtual:         "901.55",
-		PrecoReferencia:    "1099.90",
-		DescontoPercentual: "18.04",
-		OcorridoEm:         time.Date(2026, 10, 28, 13, 5, 12, 345678000, time.UTC),
+		ProdutoID:          "725571",
+		Loja:               "kabum",
+		Nome:               "Fonte Gamer Rise Mode Elektra, 650W, Bronze, Full Modular",
+		URL:                "https://www.kabum.com.br/produto/725571/fonte-gamer-rise-mode-elektra-650w",
+		PrecoAtual:         "279.99",
+		PrecoFinal:         "265.99",
+		PrecoReferencia:    "377.77",
+		DescontoPercentual: "29.59",
+		Cupom:              domain.Cupom{Codigo: "ESQUENTA", DescontoPercentual: "5.00"},
+		OcorridoEm:         time.Date(2026, 10, 30, 17, 54, 35, 380000000, time.UTC),
 	}
 	if !promocao.OcorridoEm.Equal(esperado.OcorridoEm) {
 		t.Errorf("ocorrido_em = %v, esperava %v", promocao.OcorridoEm, esperado.OcorridoEm)
@@ -49,15 +52,36 @@ func TestDecodificaEventoDoContrato(t *testing.T) {
 	}
 }
 
+func TestCupomNuloEPercentualNulo(t *testing.T) {
+	semCupom := strings.Replace(eventoExemplo, `{"codigo": "ESQUENTA", "desconto_percentual": "5.00"}`, "null", 1)
+	promocao, err := DecodificarEvento(map[string]any{"json": semCupom})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if promocao.Cupom.Existe() {
+		t.Errorf("cupom null não deveria existir, veio %+v", promocao.Cupom)
+	}
+
+	semValor := strings.Replace(eventoExemplo, `"desconto_percentual": "5.00"}`, `"desconto_percentual": null}`, 1)
+	promocao, err = DecodificarEvento(map[string]any{"json": semValor})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if !promocao.Cupom.Existe() || promocao.Cupom.ValorConhecido() {
+		t.Errorf("cupom com percentual null deveria existir sem valor, veio %+v", promocao.Cupom)
+	}
+}
+
 func TestRejeitaMensagensForaDoContrato(t *testing.T) {
 	casos := map[string]map[string]any{
 		"sem campo json":    {"outro": "x"},
 		"json inválido":     {"json": "{isso nao e json"},
 		"tipo errado":       {"json": strings.Replace(eventoExemplo, "promocao_detectada", "outro_evento", 1)},
-		"versão errada":     {"json": strings.Replace(eventoExemplo, `"versao": 1`, `"versao": 2`, 1)},
-		"data inválida":     {"json": strings.Replace(eventoExemplo, "2026-10-28T13:05:12.345678+00:00", "ontem", 1)},
-		"sem produto_id":    {"json": strings.Replace(eventoExemplo, `"produto_id": "8776497"`, `"produto_id": ""`, 1)},
-		"preço como número": {"json": strings.Replace(eventoExemplo, `"preco_atual": "901.55"`, `"preco_atual": 901.55`, 1)},
+		"versão antiga":     {"json": strings.Replace(eventoExemplo, `"versao": 2`, `"versao": 1`, 1)},
+		"data inválida":     {"json": strings.Replace(eventoExemplo, "2026-10-30T17:54:35.380000+00:00", "ontem", 1)},
+		"sem produto_id":    {"json": strings.Replace(eventoExemplo, `"produto_id": "725571"`, `"produto_id": ""`, 1)},
+		"sem preco_final":   {"json": strings.Replace(eventoExemplo, `"preco_final": "265.99", `, "", 1)},
+		"preço como número": {"json": strings.Replace(eventoExemplo, `"preco_atual": "279.99"`, `"preco_atual": 279.99`, 1)},
 	}
 	for nome, campos := range casos {
 		if _, err := DecodificarEvento(campos); err == nil {
@@ -128,7 +152,7 @@ func TestEntregaPromocaoEConfirma(t *testing.T) {
 
 	recebidas := a.executar(t, func(domain.Promocao) error { return nil })
 
-	if len(recebidas) != 1 || recebidas[0].ProdutoID != "8776497" {
+	if len(recebidas) != 1 || recebidas[0].ProdutoID != "725571" {
 		t.Fatalf("esperava 1 promoção, veio %+v", recebidas)
 	}
 	if n := a.pendentes(t); n != 0 {
