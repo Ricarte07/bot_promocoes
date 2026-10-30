@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 import requests
 
+from domain.cupom import Cupom
 from infrastructure.scrapers.americanas import (
     LOJA,
     ColetorAmericanas,
@@ -41,6 +42,8 @@ def test_extrai_menor_preco_em_estoque_como_decimal_exato():
     assert produto.preco_avista == Decimal("901.55")
     assert isinstance(produto.preco_avista, Decimal)
     assert produto.vendedor == "magazineluiza"
+    # A coleção "cupom10do10" do __NEXT_DATA__ vira o cupom 10DO10, sem valor conhecido.
+    assert produto.cupom == Cupom("10DO10")
 
 
 def test_extrai_produto_sem_estoque():
@@ -50,6 +53,7 @@ def test_extrai_produto_sem_estoque():
     assert produto.nome == "Cartucho Preto Original HP 667 Ink Advantage 3YM79AL"
     assert produto.disponivel is False
     assert produto.vendedor == ""
+    assert produto.cupom is None  # a página sem estoque não tem __NEXT_DATA__
 
 
 def test_ignora_oferta_em_estoque_com_preco_zero():
@@ -82,6 +86,31 @@ def test_produto_sem_ofertas_fica_indisponivel():
     produto = extrair_produto(pagina_com_product('{"@type":"Product","sku":"1","name":"X"}'))
 
     assert produto.disponivel is False
+
+
+def pagina_com_colecoes(nomes: list[str]) -> str:
+    colecoes = ",".join(f'{{"id":"{i}","name":"{nome}"}}' for i, nome in enumerate(nomes))
+    return (
+        pagina_com_product('{"@type":"Product","sku":"1","name":"X","offers":[]}')
+        + '<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"data":'
+        f'{{"product":{{"clusterHighlights":[{colecoes}]}}}}}}}}}}</script>'
+    )
+
+
+def test_colecao_cupom_vira_cupom_em_maiusculas():
+    assert extrair_produto(pagina_com_colecoes(["loja-magalu", "cupom-lacta15"])).cupom == Cupom("LACTA15")
+
+
+def test_sem_colecao_de_cupom_nao_tem_cupom():
+    assert extrair_produto(pagina_com_colecoes(["loja-magalu", "relampago-cl"])).cupom is None
+
+
+def test_next_data_quebrado_nao_derruba_a_extracao():
+    html = (
+        pagina_com_product('{"@type":"Product","sku":"1","name":"X","offers":[]}')
+        + '<script id="__NEXT_DATA__" type="application/json">{nao e json</script>'
+    )
+    assert extrair_produto(html).cupom is None
 
 
 def test_pagina_sem_ld_json_e_invalida():

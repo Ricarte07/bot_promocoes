@@ -7,6 +7,11 @@ A página de produto da Americanas publica os dados em blocos
 disponibilidade. Quando o produto está esgotado, a única oferta vem com
 preço "0" e availability OutOfStock.
 
+O cupom não está no JSON-LD. Ele aparece no bloco __NEXT_DATA__, na lista de
+coleções do produto (clusterHighlights): uma coleção chamada "cupom10do10"
+significa que o cupom 10DO10 vale para o item. A página não diz quanto o
+cupom desconta, por isso o percentual fica desconhecido.
+
 extrair_produto(html) é uma função pura, sem rede. O laço de URLs, o
 intervalo e o tratamento de erro vêm de ColetorPorUrls.
 """
@@ -15,8 +20,9 @@ import json
 import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from typing import Any, Iterator
+from typing import Any, Iterator, Optional
 
+from domain.cupom import Cupom
 from infrastructure.scrapers.base import ColetorPorUrls, PaginaInvalida, ProdutoExtraido
 
 __all__ = ["LOJA", "ColetorAmericanas", "PaginaInvalida", "ProdutoAmericanas", "extrair_produto"]
@@ -26,8 +32,10 @@ LOJA = "americanas"
 _PADRAO_LD_JSON = re.compile(
     r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>', re.S
 )
+_PADRAO_NEXT_DATA = re.compile(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.S)
 _EM_ESTOQUE = "https://schema.org/InStock"
 _SUFIXO_NOME = " | Americanas"
+_PREFIXO_COLECAO_CUPOM = "cupom"
 
 
 @dataclass(frozen=True)
@@ -48,6 +56,7 @@ def extrair_produto(html: str) -> ProdutoAmericanas:
     o comprador vê como "a partir de" na página.
     """
     produto = _localizar_produto(html)
+    cupom = _extrair_cupom(html)
 
     sku = produto.get("sku")
     if not sku:
@@ -67,7 +76,12 @@ def extrair_produto(html: str) -> ProdutoAmericanas:
     ]
     if not disponiveis:
         return ProdutoAmericanas(
-            produto_id=str(sku), nome=nome, preco_avista=Decimal("0"), disponivel=False, vendedor=""
+            produto_id=str(sku),
+            nome=nome,
+            preco_avista=Decimal("0"),
+            disponivel=False,
+            vendedor="",
+            cupom=cupom,
         )
 
     menor_preco, melhor_oferta = min(disponiveis, key=lambda par: par[0])
@@ -79,6 +93,7 @@ def extrair_produto(html: str) -> ProdutoAmericanas:
         preco_avista=menor_preco,
         disponivel=True,
         vendedor=str(vendedor),
+        cupom=cupom,
     )
 
 
@@ -108,6 +123,31 @@ def _localizar_produto(html: str) -> dict:
     if not encontrou_algum:
         raise PaginaInvalida("não encontrei nenhum bloco JSON-LD na página")
     raise PaginaInvalida("a página não contém um bloco Product")
+
+
+def _extrair_cupom(html: str) -> Optional[Cupom]:
+    """Procura, nas coleções do produto dentro do __NEXT_DATA__, uma chamada "cupom<CÓDIGO>".
+
+    Página sem __NEXT_DATA__ ou sem coleções simplesmente não tem cupom: não é erro.
+    """
+    encontrado = _PADRAO_NEXT_DATA.search(html)
+    if encontrado is None:
+        return None
+    try:
+        dados = json.loads(encontrado.group(1))
+    except json.JSONDecodeError:
+        return None
+
+    produto = (
+        ((dados.get("props") or {}).get("pageProps") or {}).get("data") or {}
+    ).get("product") or {}
+    for colecao in produto.get("clusterHighlights") or []:
+        nome = str((colecao or {}).get("name") or "")
+        if nome.lower().startswith(_PREFIXO_COLECAO_CUPOM):
+            codigo = nome[len(_PREFIXO_COLECAO_CUPOM):].strip(" -_").upper()
+            if codigo:
+                return Cupom(codigo)
+    return None
 
 
 def _ler_preco(valor: Any) -> Decimal:

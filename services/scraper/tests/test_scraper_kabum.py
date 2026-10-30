@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 import requests
 
+from domain.cupom import Cupom
 from infrastructure.scrapers.kabum import (
     LOJA,
     ColetorKabum,
@@ -31,6 +32,7 @@ def test_extrai_preco_avista_como_decimal_exato():
     assert produto.disponivel is True
     assert produto.preco_avista == Decimal("1569.99")
     assert isinstance(produto.preco_avista, Decimal)
+    assert produto.cupom is None
 
 
 def test_extrai_produto_sem_estoque():
@@ -39,6 +41,52 @@ def test_extrai_produto_sem_estoque():
     assert produto.produto_id == "412289"
     assert produto.disponivel is False
     assert produto.preco_avista == Decimal("5720.06")
+
+
+def test_extrai_cupom_do_selo_com_codigo_e_percentual():
+    produto = extrair_produto(ler_fixture("kabum_produto_com_cupom.html"))
+
+    assert produto.produto_id == "725571"
+    assert produto.preco_avista == Decimal("279.99")
+    assert produto.cupom == Cupom("ESQUENTA", Decimal("5"))
+
+
+def pagina_com_selo(selo_json: str) -> str:
+    produto = (
+        '{"id":1,"title":"X","available":true,"price":100,"prices":{"priceWithDiscount":100},'
+        '"stamps":' + selo_json + "}"
+    )
+    return (
+        '<script id="__NEXT_DATA__" type="application/json">'
+        '{"props":{"pageProps":{"product":' + produto + "}}}</script>"
+    )
+
+
+def test_selo_sem_percentual_vira_cupom_sem_valor():
+    produto = extrair_produto(
+        pagina_com_selo('{"title":"CUPOM NATAL","description":"Use o cupom NATAL e garanta seu desconto"}')
+    )
+    assert produto.cupom == Cupom("NATAL")
+
+
+def test_selo_que_nao_e_cupom_e_ignorado():
+    produto = extrair_produto(
+        pagina_com_selo('{"title":"FRETE GRÁTIS","description":"Entrega grátis para todo o Brasil"}')
+    )
+    assert produto.cupom is None
+
+
+def test_selo_nulo_nao_tem_cupom():
+    assert extrair_produto(pagina_com_selo("null")).cupom is None
+
+
+def test_coleta_repassa_o_cupom():
+    url = "https://www.kabum.com.br/produto/725571/fonte"
+    coletor, _, _ = montar({url: ler_fixture("kabum_produto_com_cupom.html")})
+
+    itens = coletor.coletar()
+
+    assert itens[0].cupom == Cupom("ESQUENTA", Decimal("5"))
 
 
 def test_pagina_sem_next_data_e_invalida():
