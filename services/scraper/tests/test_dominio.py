@@ -124,9 +124,84 @@ def test_cupom_que_some_nao_dispara_nem_repete():
     assert len(oferta.coletar_eventos()) == 1
 
 
-def test_cupom_presente_desde_a_primeira_coleta_so_registra():
-    oferta = Oferta("x", "loja", Preco(Decimal("1000")), cupom=Cupom("QUINZE", Decimal("15")))
-    assert oferta.preco_final == Preco(Decimal("850.00"))
+def test_cupom_presente_na_primeira_coleta_ja_e_promocao():
+    oferta = nova_oferta()
+    oferta.registrar_preco(Preco(Decimal("1000")), Cupom("QUINZE", Decimal("15")))
+
+    assert len(oferta.coletar_eventos()) == 1
 
     oferta.registrar_preco(Preco(Decimal("1000")), Cupom("QUINZE", Decimal("15")))
+    assert oferta.coletar_eventos() == []  # nada mudou, não repete
+
+
+# --- desconto anunciado pela loja (preço "de") ---------------------------------
+
+
+def test_desconto_anunciado_na_primeira_coleta_ja_e_promocao():
+    oferta = nova_oferta()
+    oferta.registrar_preco(Preco(Decimal("1000")), preco_de=Preco(Decimal("1250")))
+
+    eventos = oferta.coletar_eventos()
+
+    assert len(eventos) == 1
+    assert eventos[0].preco_atual == Decimal("1000")
+    assert eventos[0].preco_referencia == Decimal("1250")  # a base foi o "de" da loja
+    assert eventos[0].desconto_percentual == Decimal("20.00")
+
+
+def test_desconto_anunciado_nao_repete_enquanto_nada_muda():
+    oferta = nova_oferta()
+    oferta.registrar_preco(Preco(Decimal("1000")), preco_de=Preco(Decimal("1250")))
+    oferta.coletar_eventos()
+
+    oferta.registrar_preco(Preco(Decimal("1000")), preco_de=Preco(Decimal("1250")))
     assert oferta.coletar_eventos() == []
+
+
+def test_desconto_anunciado_pequeno_nao_dispara():
+    oferta = nova_oferta()
+    oferta.registrar_preco(Preco(Decimal("1000")), preco_de=Preco(Decimal("1100")))
+    assert oferta.coletar_eventos() == []
+
+
+def test_preco_de_menor_que_o_por_e_ignorado():
+    oferta = nova_oferta()
+    oferta.registrar_preco(Preco(Decimal("1000")), preco_de=Preco(Decimal("900")))
+    assert oferta.coletar_eventos() == []
+
+
+def test_cupom_e_desconto_anunciado_se_somam():
+    oferta = nova_oferta()
+    oferta.registrar_preco(
+        Preco(Decimal("1000")), Cupom("DEZ", Decimal("10")), preco_de=Preco(Decimal("1100"))
+    )
+
+    eventos = oferta.coletar_eventos()
+
+    assert len(eventos) == 1
+    assert eventos[0].preco_final == Decimal("900.00")
+    assert eventos[0].desconto_percentual == Decimal("18.18")
+
+
+def test_promocao_que_acaba_e_volta_dispara_de_novo():
+    oferta = nova_oferta()
+    oferta.registrar_preco(Preco(Decimal("1000")), preco_de=Preco(Decimal("1250")))
+    oferta.coletar_eventos()
+
+    oferta.registrar_preco(Preco(Decimal("1000")))  # loja tirou o "de"
+    assert oferta.coletar_eventos() == []
+
+    oferta.registrar_preco(Preco(Decimal("1000")), preco_de=Preco(Decimal("1250")))
+    assert len(oferta.coletar_eventos()) == 1
+
+
+def test_queda_adicional_durante_a_promocao_dispara_de_novo():
+    oferta = nova_oferta()
+    oferta.registrar_preco(Preco(Decimal("1000")), preco_de=Preco(Decimal("1250")))
+    oferta.coletar_eventos()
+
+    oferta.registrar_preco(Preco(Decimal("900")), preco_de=Preco(Decimal("1250")))
+
+    eventos = oferta.coletar_eventos()
+    assert len(eventos) == 1
+    assert eventos[0].desconto_percentual == Decimal("28.00")

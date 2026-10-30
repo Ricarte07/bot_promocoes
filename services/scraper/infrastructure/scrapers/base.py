@@ -44,6 +44,7 @@ class ProdutoExtraido:
     preco_avista: Decimal
     disponivel: bool
     cupom: Optional[Cupom] = field(default=None, kw_only=True)  # anunciado na página, se houver
+    preco_de: Optional[Decimal] = field(default=None, kw_only=True)  # preço "de" da loja, se houver
 
 
 def baixar_html(url: str, timeout: float = 15.0) -> str:
@@ -118,4 +119,5 @@ class ColetorPorUrls(ColetorDePrecos):
             nome=produto.nome,
             url=url,
             cupom=produto.cupom,
+            preco_de=Preco(produto.preco_de) if produto.preco_de else None,
         )
