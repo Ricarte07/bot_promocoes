@@ -7,10 +7,12 @@ A página de produto da Americanas publica os dados em blocos
 disponibilidade. Quando o produto está esgotado, a única oferta vem com
 preço "0" e availability OutOfStock.
 
-O cupom não está no JSON-LD. Ele aparece no bloco __NEXT_DATA__, na lista de
-coleções do produto (clusterHighlights): uma coleção chamada "cupom10do10"
-significa que o cupom 10DO10 vale para o item. A página não diz quanto o
-cupom desconta, por isso o percentual fica desconhecido.
+Duas informações não estão no JSON-LD e vêm do bloco __NEXT_DATA__:
+- o cupom, na lista de coleções do produto (clusterHighlights): uma coleção
+  chamada "cupom10do10" significa que o cupom 10DO10 vale para o item. A
+  página não diz quanto o cupom desconta, por isso o percentual fica
+  desconhecido;
+- o preço "de", em offers.offers[].listPrice, um por vendedor.
 
 extrair_produto(html) é uma função pura, sem rede. O laço de URLs, o
 intervalo e o tratamento de erro vêm de ColetorPorUrls.
@@ -56,7 +58,8 @@ def extrair_produto(html: str) -> ProdutoAmericanas:
     o comprador vê como "a partir de" na página.
     """
     produto = _localizar_produto(html)
-    cupom = _extrair_cupom(html)
+    produto_next = _produto_next_data(html)
+    cupom = _extrair_cupom(produto_next)
 
     sku = produto.get("sku")
     if not sku:
@@ -94,6 +97,7 @@ def extrair_produto(html: str) -> ProdutoAmericanas:
         disponivel=True,
         vendedor=str(vendedor),
         cupom=cupom,
+        preco_de=_extrair_preco_de(produto_next, str(vendedor)),
     )
 
 
@@ -125,23 +129,39 @@ def _localizar_produto(html: str) -> dict:
     raise PaginaInvalida("a página não contém um bloco Product")
 
 
-def _extrair_cupom(html: str) -> Optional[Cupom]:
-    """Procura, nas coleções do produto dentro do __NEXT_DATA__, uma chamada "cupom<CÓDIGO>".
+def _produto_next_data(html: str) -> dict:
+    """Devolve o objeto product do __NEXT_DATA__, ou {} se a página não o tiver.
 
-    Página sem __NEXT_DATA__ ou sem coleções simplesmente não tem cupom: não é erro.
+    Tudo que vem daqui é complemento: página sem esse bloco não é erro.
     """
     encontrado = _PADRAO_NEXT_DATA.search(html)
     if encontrado is None:
-        return None
+        return {}
     try:
-        dados = json.loads(encontrado.group(1))
+        dados = json.loads(encontrado.group(1), parse_float=Decimal)
     except json.JSONDecodeError:
-        return None
-
+        return {}
     produto = (
         ((dados.get("props") or {}).get("pageProps") or {}).get("data") or {}
-    ).get("product") or {}
-    for colecao in produto.get("clusterHighlights") or []:
+    ).get("product")
+    return produto if isinstance(produto, dict) else {}
+
+
+def _extrair_preco_de(produto_next: dict, vendedor: str) -> Optional[Decimal]:
+    """Lê o listPrice da oferta do vendedor escolhido; só vale se for maior que o preço."""
+    for oferta in ((produto_next.get("offers") or {}).get("offers")) or []:
+        identificador = str(((oferta or {}).get("seller") or {}).get("identifier") or "")
+        if identificador != vendedor:
+            continue
+        lista = _ler_preco(oferta.get("listPrice"))
+        preco = _ler_preco(oferta.get("price"))
+        return lista if lista > preco else None
+    return None
+
+
+def _extrair_cupom(produto_next: dict) -> Optional[Cupom]:
+    """Procura, nas coleções do produto, uma chamada "cupom<CÓDIGO>"."""
+    for colecao in produto_next.get("clusterHighlights") or []:
         nome = str((colecao or {}).get("name") or "")
         if nome.lower().startswith(_PREFIXO_COLECAO_CUPOM):
             codigo = nome[len(_PREFIXO_COLECAO_CUPOM):].strip(" -_").upper()

@@ -30,7 +30,7 @@ def montar():
     return coletor, publicador, caso_de_uso
 
 
-def item(valor, cupom=None):
+def item(valor, cupom=None, preco_de=None):
     return PrecoColetado(
         "notebook-x",
         "loja-a",
@@ -38,6 +38,7 @@ def item(valor, cupom=None):
         nome="Notebook X",
         url="https://loja-a.com/notebook-x",
         cupom=cupom,
+        preco_de=Preco(Decimal(preco_de)) if preco_de else None,
     )
 
 
@@ -79,3 +80,12 @@ def test_cupom_coletado_chega_ao_evento():
     evento = publicador.publicados[0]
     assert evento.cupom == Cupom("QUINZE", Decimal("15"))
     assert evento.preco_final == Decimal("850.00")
+
+
+def test_desconto_anunciado_publica_ja_na_primeira_coleta():
+    coletor, publicador, caso_de_uso = montar()
+    coletor.precos = [item("1000", preco_de="1300")]
+
+    assert caso_de_uso.executar() == 1
+    assert publicador.publicados[0].preco_referencia == Decimal("1300")
+    assert publicador.publicados[0].desconto_percentual == Decimal("23.08")

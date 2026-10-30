@@ -17,6 +17,7 @@ class PrecoColetado:
     nome: str = ""
     url: str = ""
     cupom: Optional[Cupom] = None  # cupom anunciado na página, se houver
+    preco_de: Optional[Preco] = None  # preço "de" que a loja anuncia, se houver
 
 
 @dataclass(frozen=True)

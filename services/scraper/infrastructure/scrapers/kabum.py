@@ -61,7 +61,16 @@ def extrair_produto(html: str) -> ProdutoKabum:
         preco_avista=Decimal(preco_avista),
         disponivel=bool(produto.get("available")),
         cupom=_extrair_cupom(produto.get("stamps")),
+        preco_de=_preco_de(precos.get("oldPrice")),
     )
+
+
+def _preco_de(valor: Any) -> Optional[Decimal]:
+    """O "de" da Kabum é prices.oldPrice; vem 0 quando não há desconto anunciado."""
+    if valor is None:
+        return None
+    preco = Decimal(valor)
+    return preco if preco > 0 else None
 
 
 def _extrair_cupom(selo: Any) -> Optional[Cupom]:

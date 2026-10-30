@@ -44,6 +44,8 @@ def test_extrai_menor_preco_em_estoque_como_decimal_exato():
     assert produto.vendedor == "magazineluiza"
     # A coleção "cupom10do10" do __NEXT_DATA__ vira o cupom 10DO10, sem valor conhecido.
     assert produto.cupom == Cupom("10DO10")
+    # O listPrice da oferta do vendedor escolhido (magazineluiza) é o preço "de".
+    assert produto.preco_de == Decimal("1279")
 
 
 def test_extrai_produto_sem_estoque():
@@ -54,6 +56,7 @@ def test_extrai_produto_sem_estoque():
     assert produto.disponivel is False
     assert produto.vendedor == ""
     assert produto.cupom is None  # a página sem estoque não tem __NEXT_DATA__
+    assert produto.preco_de is None
 
 
 def test_ignora_oferta_em_estoque_com_preco_zero():
@@ -103,6 +106,35 @@ def test_colecao_cupom_vira_cupom_em_maiusculas():
 
 def test_sem_colecao_de_cupom_nao_tem_cupom():
     assert extrair_produto(pagina_com_colecoes(["loja-magalu", "relampago-cl"])).cupom is None
+
+
+def pagina_com_ofertas_next(ofertas_json: str) -> str:
+    return (
+        pagina_com_product(
+            '{"@type":"Product","sku":"1","name":"X","offers":[{"@type":"Offer","price":"100",'
+            '"availability":"https://schema.org/InStock","seller":{"name":"lojista"}}]}'
+        )
+        + '<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"data":'
+        '{"product":{"offers":{"offers":[' + ofertas_json + ']}}}}}}</script>'
+    )
+
+
+def test_preco_de_vem_do_list_price_do_vendedor_escolhido():
+    html = pagina_com_ofertas_next(
+        '{"price":100,"listPrice":150,"seller":{"identifier":"lojista"}},'
+        '{"price":120,"listPrice":999,"seller":{"identifier":"outro"}}'
+    )
+    assert extrair_produto(html).preco_de == Decimal("150")
+
+
+def test_list_price_igual_ou_menor_que_o_preco_nao_e_preco_de():
+    html = pagina_com_ofertas_next('{"price":100,"listPrice":100,"seller":{"identifier":"lojista"}}')
+    assert extrair_produto(html).preco_de is None
+
+
+def test_sem_oferta_do_vendedor_no_next_data_nao_tem_preco_de():
+    html = pagina_com_ofertas_next('{"price":100,"listPrice":150,"seller":{"identifier":"outro"}}')
+    assert extrair_produto(html).preco_de is None
 
 
 def test_next_data_quebrado_nao_derruba_a_extracao():
@@ -179,6 +211,7 @@ def test_coleta_produto_em_estoque_com_loja_americanas():
     assert itens[0].preco.valor == Decimal("901.55")
     assert itens[0].nome == "Impressora Epson EcoTank L1250 Wi-Fi Bivolt"
     assert itens[0].url == URL_EM_ESTOQUE
+    assert itens[0].preco_de.valor == Decimal("1279")
 
 
 def test_ignora_produto_sem_estoque():

@@ -28,10 +28,8 @@ class ProcessarColeta:
                     preco_referencia=item.preco,
                     nome=item.nome,
                     url=item.url,
-                    cupom=item.cupom,
                 )
-            else:
-                oferta.registrar_preco(item.preco, item.cupom)
+            oferta.registrar_preco(item.preco, cupom=item.cupom, preco_de=item.preco_de)
 
             self.repositorio.salvar(oferta)
 

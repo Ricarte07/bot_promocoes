@@ -33,6 +33,7 @@ def test_extrai_preco_avista_como_decimal_exato():
     assert produto.preco_avista == Decimal("1569.99")
     assert isinstance(produto.preco_avista, Decimal)
     assert produto.cupom is None
+    assert produto.preco_de == Decimal("1964.59")
 
 
 def test_extrai_produto_sem_estoque():
@@ -41,6 +42,7 @@ def test_extrai_produto_sem_estoque():
     assert produto.produto_id == "412289"
     assert produto.disponivel is False
     assert produto.preco_avista == Decimal("5720.06")
+    assert produto.preco_de is None  # oldPrice 0: sem desconto anunciado
 
 
 def test_extrai_cupom_do_selo_com_codigo_e_percentual():
@@ -141,6 +143,7 @@ def test_coleta_produto_em_estoque_com_loja_kabum():
     assert itens[0].preco.valor == Decimal("1569.99")
     assert itens[0].nome.startswith("Water Cooler NZXT Kraken Elite 240")
     assert itens[0].url == URL_EM_ESTOQUE
+    assert itens[0].preco_de.valor == Decimal("1964.59")
 
 
 def test_ignora_produto_sem_estoque():
