@@ -6,6 +6,7 @@ from application.portas import (
     PrecoColetado,
     ProdutoMonitorado,
 )
+from domain.cupom import Cupom
 from domain.eventos import PromocaoDetectada
 from domain.preco import Preco
 from infrastructure.mensageria.console import PublicadorNoConsole
@@ -122,3 +123,25 @@ def test_com_redis_url_publica_no_redis(monkeypatch):
 
     assert isinstance(publicador, PublicadorRedis)
     assert falso.pingou is True
+
+
+def test_mensagem_no_console_mostra_cupom_e_preco_final():
+    mensagens: list[str] = []
+    publicador = PublicadorNoConsole(escrever=mensagens.append)
+
+    publicador.publicar(
+        PromocaoDetectada(
+            produto_id="1",
+            loja="kabum",
+            preco_atual=Decimal("1000"),
+            preco_referencia=Decimal("1000"),
+            desconto_percentual=Decimal("15.00"),
+            nome="Notebook X",
+            cupom=Cupom("QUINZE", Decimal("15")),
+        )
+    )
+
+    assert mensagens == [
+        "[PROMOÇÃO] kabum | Notebook X | de R$ 1000 por R$ 850.00 com o cupom QUINZE "
+        "(15.00% de desconto)"
+    ]

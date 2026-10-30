@@ -15,8 +15,9 @@ class PublicadorNoConsole(PublicadorDeEventos):
 
     def publicar(self, evento: PromocaoDetectada) -> None:
         descricao = evento.nome or f"produto {evento.produto_id}"
+        cupom = f" com o cupom {evento.cupom.codigo}" if evento.cupom else ""
         self._escrever(
             f"[PROMOÇÃO] {evento.loja} | {descricao} | "
-            f"de R$ {evento.preco_referencia} por R$ {evento.preco_atual} "
+            f"de R$ {evento.preco_referencia} por R$ {evento.preco_final}{cupom} "
             f"({evento.desconto_percentual}% de desconto) {evento.url}".rstrip()
         )
