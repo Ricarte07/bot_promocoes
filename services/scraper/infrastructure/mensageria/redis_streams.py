@@ -47,7 +47,7 @@ class PublicadorRedis(PublicadorDeEventos):
             self._stream,
             {CAMPO_JSON: serializar_evento(evento)},
             maxlen=self._tamanho_maximo,
-            approximate=True,  # o Redis apara em blocos, o que é mais barato que o corte exato
+            approximate=True,
         )
         logger.info(
             "Redis: promoção de %s/%s publicada no stream %s (id %s)",
