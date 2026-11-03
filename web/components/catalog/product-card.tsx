@@ -29,12 +29,20 @@ export default function ProductCard({
       <div className="product-body">
         <p className="eyebrow">PRODUTO MONITORADO</p>
         <h2>{product.label}</h2>
-        <p className="hint">Identificação extraída da URL</p>
+        <p className="hint">Nome coletado ou identificação extraída da URL</p>
         <div className="price">
           {product.price !== null
             ? formatMoney(product.price)
             : 'Preço indisponível'}
         </div>
+        {product.coupon && (
+          <p className="hint">
+            Cupom: {product.coupon}{' '}
+            {product.couponDiscount != null
+              ? `(${product.couponDiscount}%) — preço com cupom: ${formatMoney(product.finalPrice!)}`
+              : '(desconto não informado pela loja)'}
+          </p>
+        )}
         <p className="price-note">
           {product.reference !== null
             ? `Referência: ${formatMoney(product.reference)}`

@@ -9,6 +9,9 @@ export type Product = {
   reference: number | null;
   updated: string | null;
   history: Observation[];
+  coupon?: string | null;
+  couponDiscount?: number | null;
+  finalPrice?: number | null;
 };
 export type Catalog = {
   products: Product[];

@@ -1,3 +1,4 @@
 pytest
 redis
 requests
+psycopg[binary]==3.2.13

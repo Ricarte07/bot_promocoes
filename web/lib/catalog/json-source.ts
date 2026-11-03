@@ -13,5 +13,5 @@ export async function readJsonProducts(): Promise<Product[]> {
   if (!Array.isArray(rows)) {
     throw new Error('O catálogo precisa ser uma lista de produtos.');
   }
-  return rows.map(mapProduct);
+  return rows.filter((row) => !row?.listagem).map(mapProduct);
 }

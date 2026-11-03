@@ -1,6 +1,6 @@
 # Bufos Promo
 
-Interface Next.js/React do bot. Nenhum arquivo do scraper, notifier ou SQL foi alterado para implementar o painel.
+Interface Next.js/React do bot. Veja [a configuração compartilhada do Supabase](../docs/supabase.md).
 
 ## Executar
 
@@ -13,22 +13,22 @@ npm run dev
 
 Abra http://localhost:3000. Para produção, `npm run build` e `npm start`.
 
-Sem `DATABASE_URL`, a página lê `../services/scraper/produtos.json` em cada atualização. `PRODUCTS_FILE` permite selecionar outro arquivo (prefira caminho absoluto). Execute os comandos a partir de `web` e mantenha o arquivo disponível no servidor.
+Com `CATALOG_SOURCE=json` (ou sem `DATABASE_URL` e sem seleção explícita), a página lê `../services/scraper/produtos.json` em cada atualização. `PRODUCTS_FILE` permite selecionar outro arquivo (prefira caminho absoluto). Execute os comandos a partir de `web` e mantenha o arquivo disponível no servidor.
 
 A memória do processo Python não é acessível ao Next.js. Por isso o modo JSON mostra links reais, identificação derivada da URL e estados de ausência para preço, imagem e histórico. Nenhum valor é simulado e nenhuma coleta é iniciada pelo painel.
 
-## PostgreSQL opcional, já existente
+## PostgreSQL / Supabase
 
-Para consultar preços e histórico, é necessário integrar e configurar o PostgreSQL e as tabelas do scraper. Essa integração não faz parte deste frontend. O painel NÃO cria tabelas, executa migrações ou grava preços. O registro do histórico depende de um adaptador PostgreSQL no scraper.
+O scraper agora grava as tabelas de `sql/schema.sql`; siga `docs/supabase.md` antes de selecionar PostgreSQL. O painel só consulta, sem criar tabelas nem executar coletas. O `.env` da raiz também é carregado, preservando valores já definidos pelo ambiente ou por `web/.env.local`. `CATALOG_SOURCE=postgres` seleciona o banco explicitamente.
 
 O servidor Next.js utiliza um subprocesso Python com a dependência `psycopg`, que precisa estar instalada no ambiente Python. Configure no ambiente do servidor (ou em `web/.env.local`):
 
 ```dotenv
-DATABASE_URL=postgresql://USUARIO:SENHA@HOST:5432/BANCO
+DATABASE_URL=postgresql://USUARIO:SENHA_CODIFICADA@HOST:5432/BANCO?sslmode=require
 SCRAPER_PYTHON=/caminho/absoluto/para/venv/bin/python
 ```
 
-`SCRAPER_PYTHON` é opcional, com padrão `python3`. A consulta é somente leitura, com timeout, e credenciais nunca são enviadas ao navegador. Requer hospedagem Node com Python instalado; exportação estática e ambientes Edge não são suportados. A associação entre URL e oferta usa o identificador `/produto/ID`, adotado pela Kabum atual. Outras lojas exigirão adaptação dessa associação.
+`SCRAPER_PYTHON` é opcional, com padrão `python3`. A consulta é somente leitura, com timeout, e credenciais nunca são enviadas ao navegador. Requer hospedagem Node com Python instalado; exportação estática e ambientes Edge não são suportados. O catálogo parte de `ofertas` e usa o identificador persistido pelo coletor, incluindo os produtos descobertos em categorias e outras lojas.
 
 ## Comportamento
 
@@ -38,7 +38,7 @@ SCRAPER_PYTHON=/caminho/absoluto/para/venv/bin/python
 - Histórico: menor preço de todas as observações disponíveis, gráfico temporal a partir de duas coletas e tabela acessível. Datas em America/Fortaleza.
 - Oportunidades contextuais são hipóteses gerais, sem previsão sazonal por produto.
 - Atualização manual consulta novamente a fonte; não executa o scraper. Não há gravações no banco ou no navegador.
-- Nome oficial, imagem, estoque e resultado da última tentativa de coleta não estão persistidos. A data mostrada é a da oferta registrada, não uma garantia de preço vigente.
+- Nome e cupom vêm da oferta persistida, quando coletados. Imagem, estoque e resultado da última tentativa de coleta não estão persistidos. A data mostrada é a da oferta registrada, não uma garantia de preço vigente.
 - O catálogo e todo seu histórico são carregados juntos. Para catálogos grandes, uma evolução futura deve incluir paginação e consulta do histórico por produto.
 
 ## Verificações
@@ -51,9 +51,9 @@ npm run build
 
 Verificação manual: combinar filtros, limpar, abrir histórico sem registros, testar arquivo ausente/JSON inválido, navegar por teclado e testar telas de 375px e desktop. Em banco preenchido, conferir menor preço, tabela e gráfico contra `historico_precos`.
 
-Teste da fonte de dados (Node 24): `node --experimental-strip-types --test tests/catalog.test.mjs`.
+Teste da fonte de dados (Node 24): `node --experimental-strip-types --test tests/*.test.mjs`.
 
-Validação neste ambiente: teste da fonte aprovado; instalação npm bloqueada por DNS (ENOTFOUND). Build, lint e checagem de tipos permanecem pendentes até a instalação das dependências. A suíte Python também não pôde executar por ausência de pytest.
+Para incluir a leitura de um PostgreSQL real, use TEST_DATABASE_URL e SCRAPER_PYTHON conforme `docs/supabase.md`. O banco descartável de teste não envia notificações.
 
 ## Como o código está organizado
 

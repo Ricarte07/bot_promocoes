@@ -8,32 +8,35 @@ import type { Product } from './types';
 const query = `
 import os,json,psycopg
 from psycopg.rows import dict_row
-with psycopg.connect(os.environ['DATABASE_URL'],row_factory=dict_row,connect_timeout=5,options='-c default_transaction_read_only=on -c statement_timeout=8000') as c:
-    products=c.execute('SELECT loja,url FROM produtos_monitorados WHERE ativo=TRUE ORDER BY id').fetchall()
-    offers=c.execute('SELECT loja,produto_id,preco_atual,preco_referencia,atualizada_em FROM ofertas').fetchall()
-    history=c.execute('SELECT loja,produto_id,preco,coletado_em FROM historico_precos ORDER BY coletado_em,id').fetchall()
-print(json.dumps(dict(products=products,offers=offers,history=history),default=str))
+from psycopg.conninfo import conninfo_to_dict
+params=conninfo_to_dict(os.environ['DATABASE_URL'])
+host=params.get('host','')
+if host and not host.startswith('/') and host not in ('localhost','127.0.0.1','::1'):
+    if params.get('sslmode','require') not in ('require','verify-ca','verify-full'):
+        raise ValueError('PostgreSQL remoto exige SSL')
+    params.setdefault('sslmode','require')
+with psycopg.connect(**params,row_factory=dict_row,connect_timeout=5,prepare_threshold=None,options='-c default_transaction_read_only=on -c statement_timeout=8000') as c:
+    offers=c.execute('SELECT loja,produto_id,nome,url,preco_atual,preco_final,preco_de,preco_referencia,cupom_codigo,cupom_desconto_percentual,atualizada_em FROM public.ofertas ORDER BY loja,produto_id').fetchall()
+    history=c.execute('SELECT loja,produto_id,preco,coletado_em FROM public.historico_precos ORDER BY coletado_em,id').fetchall()
+print(json.dumps(dict(offers=offers,history=history),default=str))
 `;
 
 type DatabaseRows = {
-  products: Row[];
   offers: Row[];
   history: Row[];
 };
 
 export function mapDatabaseProducts(data: DatabaseRows): Product[] {
-  return data.products.map((row) => {
+  return data.offers.map((row) => {
     const product = mapProduct(row);
-    const offer = data.offers.find(
-      (offer) =>
-        offer.loja === product.store && offer.produto_id === product.id,
-    );
-
-    if (offer) {
-      product.price = Number(offer.preco_atual);
-      product.reference = Number(offer.preco_referencia);
-      product.updated = offer.atualizada_em;
-    }
+    product.id = row.produto_id;
+    product.label = row.nome || product.label;
+    product.price = Number(row.preco_atual);
+    product.reference = Number(row.preco_referencia);
+    product.updated = row.atualizada_em;
+    product.coupon = row.cupom_codigo || null;
+    product.couponDiscount = row.cupom_desconto_percentual == null ? null : Number(row.cupom_desconto_percentual);
+    product.finalPrice = Number(row.preco_final);
 
     product.history = data.history
       .filter(
