@@ -27,7 +27,16 @@ from typing import Any, Iterator, Optional
 from domain.cupom import Cupom
 from infrastructure.scrapers.base import ColetorPorUrls, PaginaInvalida, ProdutoExtraido
 
-__all__ = ["LOJA", "ColetorAmericanas", "PaginaInvalida", "ProdutoAmericanas", "extrair_produto"]
+__all__ = [
+    "LOJA",
+    "ColetorAmericanas",
+    "PaginaInvalida",
+    "ProdutoAmericanas",
+    "extrair_cupom",
+    "extrair_produto",
+    "ler_preco",
+]
+
 
 LOJA = "americanas"
 
@@ -59,7 +68,7 @@ def extrair_produto(html: str) -> ProdutoAmericanas:
     """
     produto = _localizar_produto(html)
     produto_next = _produto_next_data(html)
-    cupom = _extrair_cupom(produto_next)
+    cupom = extrair_cupom(produto_next)
 
     sku = produto.get("sku")
     if not sku:
@@ -75,7 +84,7 @@ def extrair_produto(html: str) -> ProdutoAmericanas:
         (preco, oferta)
         for oferta in ofertas
         if oferta.get("availability") == _EM_ESTOQUE
-        and (preco := _ler_preco(oferta.get("price"))) > 0
+        and (preco := ler_preco(oferta.get("price"))) > 0
     ]
     if not disponiveis:
         return ProdutoAmericanas(
@@ -153,13 +162,13 @@ def _extrair_preco_de(produto_next: dict, vendedor: str) -> Optional[Decimal]:
         identificador = str(((oferta or {}).get("seller") or {}).get("identifier") or "")
         if identificador != vendedor:
             continue
-        lista = _ler_preco(oferta.get("listPrice"))
-        preco = _ler_preco(oferta.get("price"))
+        lista = ler_preco(oferta.get("listPrice"))
+        preco = ler_preco(oferta.get("price"))
         return lista if lista > preco else None
     return None
 
 
-def _extrair_cupom(produto_next: dict) -> Optional[Cupom]:
+def extrair_cupom(produto_next: dict) -> Optional[Cupom]:
     """Procura, nas coleções do produto, uma chamada "cupom<CÓDIGO>"."""
     for colecao in produto_next.get("clusterHighlights") or []:
         nome = str((colecao or {}).get("name") or "")
@@ -170,7 +179,7 @@ def _extrair_cupom(produto_next: dict) -> Optional[Cupom]:
     return None
 
 
-def _ler_preco(valor: Any) -> Decimal:
+def ler_preco(valor: Any) -> Decimal:
     """Converte o preço do JSON-LD (texto como "949.90" ou número) em Decimal."""
     if valor is None:
         return Decimal("0")

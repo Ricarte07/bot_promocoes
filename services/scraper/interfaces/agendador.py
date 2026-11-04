@@ -34,6 +34,7 @@ from infrastructure.persistencia.memoria import OfertaRepositorioEmMemoria
 from infrastructure.persistencia.produtos_json import FonteDeProdutosJson
 from infrastructure.scrapers.americanas import LOJA as AMERICANAS
 from infrastructure.scrapers.americanas import ColetorAmericanas
+from infrastructure.scrapers.americanas_listagem import ColetorListagemAmericanas
 from infrastructure.scrapers.kabum import LOJA as KABUM
 from infrastructure.scrapers.kabum import ColetorKabum
 from infrastructure.scrapers.kabum_listagem import ColetorListagemKabum
@@ -50,6 +51,7 @@ FABRICAS_DE_COLETOR: dict[tuple[str, str], FabricaDeColetor] = {
     (KABUM, TIPO_PRODUTO): lambda itens: ColetorKabum(urls=[item.url for item in itens]),
     (KABUM, TIPO_LISTAGEM): lambda itens: ColetorListagemKabum(listagens=itens),
     (AMERICANAS, TIPO_PRODUTO): lambda itens: ColetorAmericanas(urls=[item.url for item in itens]),
+    (AMERICANAS, TIPO_LISTAGEM): lambda itens: ColetorListagemAmericanas(listagens=itens),
 }
 
 
