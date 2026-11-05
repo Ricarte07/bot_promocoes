@@ -10,6 +10,7 @@ from infrastructure.scrapers.kabum import (
     ColetorKabum,
     PaginaInvalida,
     extrair_produto,
+    ler_preco_de,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -89,6 +90,18 @@ def test_coleta_repassa_o_cupom():
     itens = coletor.coletar()
 
     assert itens[0].cupom == Cupom("ESQUENTA", Decimal("5"))
+
+
+def test_preco_de_so_conta_quando_esta_acima_do_preco_no_cartao():
+    # Riscado de verdade: "de" acima do cartão.
+    assert ler_preco_de(Decimal("1964.59"), Decimal("1847.05")) == Decimal("1964.59")
+    # Só desconto do Pix: "de" igual ao cartão.
+    assert ler_preco_de(Decimal("3529.4"), Decimal("3529.4")) is None
+    # "de" abaixo do cartão, zero, ausente ou sem preço no cartão.
+    assert ler_preco_de(Decimal("100"), Decimal("120")) is None
+    assert ler_preco_de(0, Decimal("120")) is None
+    assert ler_preco_de(None, Decimal("120")) is None
+    assert ler_preco_de(Decimal("150"), None) is None
 
 
 def test_pagina_sem_next_data_e_invalida():

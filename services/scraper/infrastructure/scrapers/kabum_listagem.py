@@ -95,7 +95,7 @@ def _converter_item(item: dict) -> Optional[ItemListagem]:
         preco_avista=Decimal(str(preco)),
         disponivel=bool(item.get("available")),
         cupom=extrair_cupom(item.get("stamps")),
-        preco_de=ler_preco_de(item.get("oldPrice")),
+        preco_de=ler_preco_de(item.get("oldPrice"), item.get("price")),
     )
     return ItemListagem(produto=produto, url=url_do_produto(codigo, item.get("friendlyName") or ""))
 
