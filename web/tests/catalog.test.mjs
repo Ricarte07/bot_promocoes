@@ -17,12 +17,14 @@ const { getCatalog } = await import('../lib/catalog.ts');
 test('catalog reads real URLs and handles missing or invalid data without fabrication', async () => {
   const original = {
     DATABASE_URL: process.env.DATABASE_URL,
+    CATALOG_SOURCE: process.env.CATALOG_SOURCE,
     PRODUCTS_FILE: process.env.PRODUCTS_FILE,
     SCRAPER_PYTHON: process.env.SCRAPER_PYTHON,
   };
   const dir = await mkdtemp(path.join(tmpdir(), 'radar-test-'));
   try {
     delete process.env.DATABASE_URL;
+    process.env.CATALOG_SOURCE = 'json';
     process.env.PRODUCTS_FILE = path.resolve(
       '../services/scraper/produtos.json',
     );
@@ -38,6 +40,7 @@ test('catalog reads real URLs and handles missing or invalid data without fabric
     process.env.PRODUCTS_FILE = path.join(dir, 'products.json');
     for (const [contents, error] of [
       ['[]', false],
+      ['[{"loja":"kabum","listagem":"https://www.kabum.com.br/hardware"}]', false],
       ['invalid', true],
       ['{}', true],
       ['[{"loja":"x","url":"javascript:alert(1)"}]', true],
@@ -49,6 +52,7 @@ test('catalog reads real URLs and handles missing or invalid data without fabric
     }
     process.env.PRODUCTS_FILE = path.join(dir, 'missing.json');
     assert.equal((await getCatalog()).error, true);
+    process.env.CATALOG_SOURCE = 'postgres';
     process.env.DATABASE_URL = 'postgresql://secret:secret@unavailable/test';
     process.env.SCRAPER_PYTHON = path.join(dir, 'missing-python');
     const failure = await getCatalog();

@@ -23,7 +23,7 @@ export default function ProductFilters({
         Buscar produto
         <input
           type="search"
-          placeholder="Nome no link do produto…"
+          placeholder="Busque pelo nome do produto…"
           value={search}
           onChange={(e) => onChange('search', e.target.value)}
         />

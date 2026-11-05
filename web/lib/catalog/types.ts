@@ -7,8 +7,12 @@ export type Product = {
   label: string;
   price: number | null;
   reference: number | null;
+  listPrice?: number | null;
   updated: string | null;
   history: Observation[];
+  coupon?: string | null;
+  couponDiscount?: number | null;
+  finalPrice?: number | null;
 };
 export type Catalog = {
   products: Product[];

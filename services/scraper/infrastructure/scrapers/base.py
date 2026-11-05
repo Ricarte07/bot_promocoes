@@ -44,7 +44,7 @@ class ProdutoExtraido:
     preco_avista: Decimal
     disponivel: bool
     cupom: Optional[Cupom] = field(default=None, kw_only=True)  # anunciado na página, se houver
-    preco_de: Optional[Decimal] = field(default=None, kw_only=True)  # preço "de" da loja, se houver
+    preco_de: Optional[Decimal] = field(default=None, kw_only=True)  # preço "de" da loja, se houver    
 
 
 def baixar_html(url: str, timeout: float = 15.0) -> str:
@@ -75,7 +75,7 @@ class ColetorPorUrls(ColetorDePrecos):
         self._intervalo = intervalo_segundos
         self._esperar = esperar
 
-    @abstractmethod
+    @abstractmethod 
     def extrair(self, html: str) -> ProdutoExtraido:
         """Lê o HTML da loja e devolve o produto. Deve lançar PaginaInvalida se não conseguir."""
 

@@ -5,9 +5,10 @@ Uso, dentro de services/scraper com o .venv ativo:
     python -m interfaces.agendador --uma-vez            # roda uma rodada e sai
     python -m interfaces.agendador --intervalo-minutos 5
 
-Sem REDIS_URL no ambiente (ou --redis-url), as promoções só aparecem no console.
-Com ele, vão para o stream `promocoes` do Redis, de onde o notifier as lê.
-SCRAPER_INTERVALO_MINUTOS define o tempo entre rodadas (padrão 30); a opção
+PERSISTENCIA escolhe postgres ou memoria; FONTE_PRODUTOS escolhe json ou postgres.
+EVENTOS_TRANSPORTE escolhe console, redis ou postgres (fila ainda sem consumidor Go).
+Quando EVENTOS_TRANSPORTE=redis, REDIS_URL configura a publicação no Redis.
+SCRAPER_INTERVALO_MINUTOS define o intervalo entre rodadas (padrão 30);
 --intervalo-minutos tem prioridade sobre ela.
 O .env da raiz do projeto é lido na partida, então basta preenchê-lo uma vez.
 """
@@ -115,7 +116,7 @@ def montar_publicador(redis_url: Optional[str]) -> PublicadorDeEventos:
 
     cliente = redis.from_url(redis_url, decode_responses=True)
     cliente.ping()  # falha já na partida se o Redis não estiver acessível
-    logger.info("Publicando promoções no Redis em %s", redis_url)
+    logger.info("Publicando promoções no Redis")
     return PublicadorRedis(cliente)
 
 
@@ -167,31 +168,77 @@ def montar_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--redis-url",
         default=os.environ.get("REDIS_URL"),
-        help="endereço do Redis (padrão: variável REDIS_URL; vazio usa o console)",
+        help="endereço do Redis (padrão: REDIS_URL; usado com --eventos redis)",
+    )
+    parser.add_argument(
+        "--persistencia", choices=["memoria", "postgres"],
+        default=os.environ.get("PERSISTENCIA", "postgres"),
+    )
+    parser.add_argument(
+        "--fonte-produtos", choices=["json", "postgres"],
+        default=os.environ.get("FONTE_PRODUTOS", "json"),
+    )
+    parser.add_argument(
+        "--eventos", choices=["console", "redis", "postgres"],
+        default=os.environ.get("EVENTOS_TRANSPORTE", "console"),
     )
     return parser
 
 
 def main(argumentos: Optional[list[str]] = None) -> None:
-    carregar_dotenv(ENV_PADRAO)  # antes do parser, porque os padrões das opções leem o ambiente
-    opcoes = montar_parser().parse_args(argumentos)
+    carregar_dotenv(ENV_PADRAO)
+    parser = montar_parser()
+    opcoes = parser.parse_args(argumentos)
+    for nome, valor, permitidos in (
+        ("PERSISTENCIA", opcoes.persistencia, ("memoria", "postgres")),
+        ("FONTE_PRODUTOS", opcoes.fonte_produtos, ("json", "postgres")),
+        ("EVENTOS_TRANSPORTE", opcoes.eventos, ("console", "redis", "postgres")),
+    ):
+        if valor not in permitidos:
+            parser.error(f"{nome} inválida: escolha {', '.join(permitidos)}")
+    if opcoes.eventos == "postgres" and opcoes.persistencia != "postgres":
+        parser.error("--eventos postgres exige --persistencia postgres")
+    if opcoes.eventos == "redis" and not opcoes.redis_url:
+        parser.error("--eventos redis exige REDIS_URL ou --redis-url")
 
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
 
-    fonte = FonteDeProdutosJson(opcoes.produtos)
-    repositorio = OfertaRepositorioEmMemoria()  # histórico vive só enquanto o processo roda
-    publicador = montar_publicador(opcoes.redis_url)
-    if not opcoes.uma_vez:
-        logger.info("Rodadas a cada %g minuto(s)", opcoes.intervalo_minutos)
+    conexao = None
+    try:
+        if opcoes.persistencia == "postgres" or opcoes.fonte_produtos == "postgres":
+            from infrastructure.persistencia.postgres import (
+                FonteDeProdutosPostgres, OfertaRepositorioPostgres, conectar,
+            )
+            conexao = conectar(os.environ.get("DATABASE_URL", ""))
+        fonte = (FonteDeProdutosPostgres(conexao) if opcoes.fonte_produtos == "postgres"
+                 else FonteDeProdutosJson(opcoes.produtos))
+        repositorio = (OfertaRepositorioPostgres(conexao) if opcoes.persistencia == "postgres"
+                       else OfertaRepositorioEmMemoria())
+        if opcoes.eventos == "postgres":
+            from infrastructure.mensageria.postgres import PublicadorPostgres
+            publicador = PublicadorPostgres(conexao)
+        else:
+            publicador = montar_publicador(opcoes.redis_url if opcoes.eventos == "redis" else None)
 
-    while True:
-        publicadas = executar_rodada(fonte, repositorio, publicador)
-        logger.info("Rodada concluída: %d promoção(ões) publicada(s)", publicadas)
-        if opcoes.uma_vez:
-            break
-        time.sleep(opcoes.intervalo_minutos * 60)
+        if not opcoes.uma_vez:
+            logger.info("Rodadas a cada %g minuto(s)", opcoes.intervalo_minutos)
+
+        while True:
+            publicadas = executar_rodada(fonte, repositorio, publicador)
+            logger.info("Rodada concluída: %d promoção(ões) publicada(s)", publicadas)
+            if opcoes.uma_vez:
+                break
+            time.sleep(opcoes.intervalo_minutos * 60)
+    except Exception:
+        # Drivers podem incluir credenciais na mensagem de erro; não imprimir traceback/DSN.
+        logger.error("Coleta interrompida. Confira a configuração escolhida, conexão, SSL e "
+                     "tabelas de sql/schema.sql. Não houve troca automática para memória.")
+        raise SystemExit(1) from None
+    finally:
+        if conexao is not None:
+            conexao.close()
 
 
 if __name__ == "__main__":
