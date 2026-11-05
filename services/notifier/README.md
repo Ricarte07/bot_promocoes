@@ -23,6 +23,10 @@ Redis Stream `promocoes`  ->  queue.Consumidor  ->  NotificarPromocao  ->  teleg
    `TELEGRAM_CHAT_ID`. Para um grupo ou canal, adicione o bot nele antes e o id
    vem negativo.
 4. Copie `.env.example` para `.env` na raiz do projeto e preencha os dois valores.
+5. Opcional: `TELEGRAM_INTERVALO_SEGUNDOS` define a pausa mínima entre duas
+   mensagens, em segundos. O padrão, 1.1, é o limite do Telegram para o mesmo
+   chat; valores maiores espaçam as notificações, e as que ainda não saíram
+   ficam guardadas no Redis enquanto esperam.
 
 ## Rodar
 

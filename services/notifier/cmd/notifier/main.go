@@ -7,9 +7,10 @@
 //
 // Configuração por variáveis de ambiente (ou pelo .env na raiz do projeto):
 //
-//	TELEGRAM_BOT_TOKEN  token dado pelo @BotFather
-//	TELEGRAM_CHAT_ID    chat, grupo ou canal que recebe as mensagens
-//	REDIS_URL           padrão redis://localhost:6379/0
+//	TELEGRAM_BOT_TOKEN            token dado pelo @BotFather
+//	TELEGRAM_CHAT_ID              chat, grupo ou canal que recebe as mensagens
+//	TELEGRAM_INTERVALO_SEGUNDOS   pausa mínima entre mensagens; padrão 1.1
+//	REDIS_URL                     padrão redis://localhost:6379/0
 package main
 
 import (
@@ -21,6 +22,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -34,9 +36,10 @@ import (
 )
 
 type config struct {
-	tokenTelegram string
-	chatID        string
-	redisURL      string
+	tokenTelegram  string
+	chatID         string
+	redisURL       string
+	intervaloEnvio time.Duration
 }
 
 func main() {
@@ -58,7 +61,10 @@ func main() {
 	ctx, parar := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer parar()
 
-	notificador := telegram.NovoCliente(cfg.tokenTelegram, cfg.chatID)
+	notificador := telegram.NovoCliente(
+		cfg.tokenTelegram, cfg.chatID, telegram.ComIntervalo(cfg.intervaloEnvio),
+	)
+	log.Info("intervalo entre mensagens", "segundos", cfg.intervaloEnvio.Seconds())
 
 	if *testar {
 		if err := enviarTeste(ctx, notificador); err != nil {
@@ -102,7 +108,29 @@ func carregarConfig() (config, error) {
 	if cfg.chatID == "" || strings.HasPrefix(cfg.chatID, "coloque_") {
 		return cfg, errors.New("defina TELEGRAM_CHAT_ID")
 	}
+	intervalo, err := lerIntervalo(os.Getenv("TELEGRAM_INTERVALO_SEGUNDOS"))
+	if err != nil {
+		return cfg, fmt.Errorf("TELEGRAM_INTERVALO_SEGUNDOS: %w", err)
+	}
+	cfg.intervaloEnvio = intervalo
 	return cfg, nil
+}
+
+// lerIntervalo converte o texto da variável em duração. Vazio usa o padrão do
+// cliente Telegram; aceita decimais com ponto ou vírgula, como "1.1" ou "90".
+func lerIntervalo(valor string) (time.Duration, error) {
+	valor = strings.TrimSpace(strings.ReplaceAll(valor, ",", "."))
+	if valor == "" {
+		return telegram.IntervaloPadrao, nil
+	}
+	segundos, err := strconv.ParseFloat(valor, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%q não é um número de segundos", valor)
+	}
+	if segundos <= 0 {
+		return 0, errors.New("precisa ser maior que zero")
+	}
+	return time.Duration(segundos * float64(time.Second)), nil
 }
 
 func conectarRedis(ctx context.Context, url string) (*redis.Client, error) {
