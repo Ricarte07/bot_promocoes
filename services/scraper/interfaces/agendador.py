@@ -1,12 +1,15 @@
 """Ponto de entrada do scraper: monta as peças e roda rodadas de coleta.
 
 Uso, dentro de services/scraper com o .venv ativo:
-    python -m interfaces.agendador                      # roda para sempre, a cada 30 min
+    python -m interfaces.agendador                      # roda para sempre, no intervalo configurado
     python -m interfaces.agendador --uma-vez            # roda uma rodada e sai
     python -m interfaces.agendador --intervalo-minutos 5
 
 PERSISTENCIA escolhe postgres ou memoria; FONTE_PRODUTOS escolhe json ou postgres.
 EVENTOS_TRANSPORTE escolhe console, redis ou postgres (fila ainda sem consumidor Go).
+Quando EVENTOS_TRANSPORTE=redis, REDIS_URL configura a publicação no Redis.
+SCRAPER_INTERVALO_MINUTOS define o intervalo entre rodadas (padrão 30);
+--intervalo-minutos tem prioridade sobre ela.
 O .env da raiz do projeto é lido na partida, então basta preenchê-lo uma vez.
 """
 
@@ -135,15 +138,31 @@ def carregar_dotenv(caminho: Path) -> None:
             os.environ[chave] = valor
 
 
-def main(argumentos: Optional[list[str]] = None) -> None:
-    carregar_dotenv(ENV_PADRAO)  # antes do parser, porque o padrão de --redis-url lê o ambiente
+INTERVALO_PADRAO_MINUTOS = 30
 
+
+def minutos_positivos(texto: str) -> float:
+    """Converte "15", "7.5" ou "7,5" em minutos; recusa zero, negativo e texto."""
+    try:
+        minutos = float(str(texto).strip().replace(",", "."))
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{texto!r} não é um número de minutos")
+    if minutos <= 0:
+        raise argparse.ArgumentTypeError("o intervalo precisa ser maior que zero")
+    return minutos
+
+
+def montar_parser() -> argparse.ArgumentParser:
+    """Opções da linha de comando; os padrões vêm do ambiente, já com o .env carregado."""
     parser = argparse.ArgumentParser(description="Agendador do scraper de promoções")
     parser.add_argument(
         "--produtos", type=Path, default=ARQUIVO_PADRAO, help="arquivo JSON com os produtos"
     )
     parser.add_argument(
-        "--intervalo-minutos", type=float, default=30, help="tempo entre rodadas"
+        "--intervalo-minutos",
+        type=minutos_positivos,
+        default=os.environ.get("SCRAPER_INTERVALO_MINUTOS") or str(INTERVALO_PADRAO_MINUTOS),
+        help="tempo entre rodadas (padrão: variável SCRAPER_INTERVALO_MINUTOS, ou 30)",
     )
     parser.add_argument("--uma-vez", action="store_true", help="roda uma rodada e sai")
     parser.add_argument(
@@ -151,12 +170,24 @@ def main(argumentos: Optional[list[str]] = None) -> None:
         default=os.environ.get("REDIS_URL"),
         help="endereço do Redis (padrão: REDIS_URL; usado com --eventos redis)",
     )
-    parser.add_argument("--persistencia", choices=["memoria", "postgres"],
-                        default=os.environ.get("PERSISTENCIA", "postgres"))
-    parser.add_argument("--fonte-produtos", choices=["json", "postgres"],
-                        default=os.environ.get("FONTE_PRODUTOS", "json"))
-    parser.add_argument("--eventos", choices=["console", "redis", "postgres"],
-                        default=os.environ.get("EVENTOS_TRANSPORTE", "console"))
+    parser.add_argument(
+        "--persistencia", choices=["memoria", "postgres"],
+        default=os.environ.get("PERSISTENCIA", "postgres"),
+    )
+    parser.add_argument(
+        "--fonte-produtos", choices=["json", "postgres"],
+        default=os.environ.get("FONTE_PRODUTOS", "json"),
+    )
+    parser.add_argument(
+        "--eventos", choices=["console", "redis", "postgres"],
+        default=os.environ.get("EVENTOS_TRANSPORTE", "console"),
+    )
+    return parser
+
+
+def main(argumentos: Optional[list[str]] = None) -> None:
+    carregar_dotenv(ENV_PADRAO)
+    parser = montar_parser()
     opcoes = parser.parse_args(argumentos)
     for nome, valor, permitidos in (
         ("PERSISTENCIA", opcoes.persistencia, ("memoria", "postgres")),
@@ -190,6 +221,9 @@ def main(argumentos: Optional[list[str]] = None) -> None:
             publicador = PublicadorPostgres(conexao)
         else:
             publicador = montar_publicador(opcoes.redis_url if opcoes.eventos == "redis" else None)
+
+        if not opcoes.uma_vez:
+            logger.info("Rodadas a cada %g minuto(s)", opcoes.intervalo_minutos)
 
         while True:
             publicadas = executar_rodada(fonte, repositorio, publicador)
