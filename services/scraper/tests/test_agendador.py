@@ -12,10 +12,16 @@ from domain.preco import Preco
 from infrastructure.mensageria.console import PublicadorNoConsole
 from infrastructure.persistencia.memoria import OfertaRepositorioEmMemoria
 from infrastructure.mensageria.redis_streams import PublicadorRedis
+import argparse
+
+import pytest
+
 from interfaces.agendador import (
     carregar_dotenv,
     executar_rodada,
+    minutos_positivos,
     montar_coletor,
+    montar_parser,
     montar_publicador,
 )
 
@@ -204,3 +210,39 @@ def test_dotenv_nao_sobrescreve_variavel_ja_definida(tmp_path, monkeypatch):
 
 def test_dotenv_inexistente_nao_e_erro(tmp_path):
     carregar_dotenv(tmp_path / "nao-existe.env")
+
+
+# --- intervalo entre rodadas -----------------------------------------------------
+
+
+def test_minutos_positivos_aceita_inteiro_decimal_e_virgula():
+    assert minutos_positivos("15") == 15
+    assert minutos_positivos("7.5") == 7.5
+    assert minutos_positivos(" 7,5 ") == 7.5
+
+
+def test_minutos_positivos_recusa_zero_negativo_e_texto():
+    for invalido in ("0", "-5", "abc", ""):
+        with pytest.raises(argparse.ArgumentTypeError):
+            minutos_positivos(invalido)
+
+
+def test_intervalo_padrao_e_30_sem_variavel(monkeypatch):
+    monkeypatch.delenv("SCRAPER_INTERVALO_MINUTOS", raising=False)
+    assert montar_parser().parse_args([]).intervalo_minutos == 30
+
+
+def test_intervalo_vem_da_variavel_de_ambiente(monkeypatch):
+    monkeypatch.setenv("SCRAPER_INTERVALO_MINUTOS", "15")
+    assert montar_parser().parse_args([]).intervalo_minutos == 15
+
+
+def test_opcao_da_linha_de_comando_vence_a_variavel(monkeypatch):
+    monkeypatch.setenv("SCRAPER_INTERVALO_MINUTOS", "15")
+    assert montar_parser().parse_args(["--intervalo-minutos", "5"]).intervalo_minutos == 5
+
+
+def test_variavel_invalida_derruba_na_partida(monkeypatch):
+    monkeypatch.setenv("SCRAPER_INTERVALO_MINUTOS", "zero")
+    with pytest.raises(SystemExit):
+        montar_parser().parse_args([])

@@ -1,12 +1,14 @@
 """Ponto de entrada do scraper: monta as peças e roda rodadas de coleta.
 
 Uso, dentro de services/scraper com o .venv ativo:
-    python -m interfaces.agendador                      # roda para sempre, a cada 30 min
+    python -m interfaces.agendador                      # roda para sempre, no intervalo configurado
     python -m interfaces.agendador --uma-vez            # roda uma rodada e sai
     python -m interfaces.agendador --intervalo-minutos 5
 
 Sem REDIS_URL no ambiente (ou --redis-url), as promoções só aparecem no console.
 Com ele, vão para o stream `promocoes` do Redis, de onde o notifier as lê.
+SCRAPER_INTERVALO_MINUTOS define o tempo entre rodadas (padrão 30); a opção
+--intervalo-minutos tem prioridade sobre ela.
 O .env da raiz do projeto é lido na partida, então basta preenchê-lo uma vez.
 """
 
@@ -135,15 +137,31 @@ def carregar_dotenv(caminho: Path) -> None:
             os.environ[chave] = valor
 
 
-def main(argumentos: Optional[list[str]] = None) -> None:
-    carregar_dotenv(ENV_PADRAO)  # antes do parser, porque o padrão de --redis-url lê o ambiente
+INTERVALO_PADRAO_MINUTOS = 30
 
+
+def minutos_positivos(texto: str) -> float:
+    """Converte "15", "7.5" ou "7,5" em minutos; recusa zero, negativo e texto."""
+    try:
+        minutos = float(str(texto).strip().replace(",", "."))
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{texto!r} não é um número de minutos")
+    if minutos <= 0:
+        raise argparse.ArgumentTypeError("o intervalo precisa ser maior que zero")
+    return minutos
+
+
+def montar_parser() -> argparse.ArgumentParser:
+    """Opções da linha de comando; os padrões vêm do ambiente, já com o .env carregado."""
     parser = argparse.ArgumentParser(description="Agendador do scraper de promoções")
     parser.add_argument(
         "--produtos", type=Path, default=ARQUIVO_PADRAO, help="arquivo JSON com os produtos"
     )
     parser.add_argument(
-        "--intervalo-minutos", type=float, default=30, help="tempo entre rodadas"
+        "--intervalo-minutos",
+        type=minutos_positivos,
+        default=os.environ.get("SCRAPER_INTERVALO_MINUTOS") or str(INTERVALO_PADRAO_MINUTOS),
+        help="tempo entre rodadas (padrão: variável SCRAPER_INTERVALO_MINUTOS, ou 30)",
     )
     parser.add_argument("--uma-vez", action="store_true", help="roda uma rodada e sai")
     parser.add_argument(
@@ -151,7 +169,12 @@ def main(argumentos: Optional[list[str]] = None) -> None:
         default=os.environ.get("REDIS_URL"),
         help="endereço do Redis (padrão: variável REDIS_URL; vazio usa o console)",
     )
-    opcoes = parser.parse_args(argumentos)
+    return parser
+
+
+def main(argumentos: Optional[list[str]] = None) -> None:
+    carregar_dotenv(ENV_PADRAO)  # antes do parser, porque os padrões das opções leem o ambiente
+    opcoes = montar_parser().parse_args(argumentos)
 
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
@@ -160,6 +183,8 @@ def main(argumentos: Optional[list[str]] = None) -> None:
     fonte = FonteDeProdutosJson(opcoes.produtos)
     repositorio = OfertaRepositorioEmMemoria()  # histórico vive só enquanto o processo roda
     publicador = montar_publicador(opcoes.redis_url)
+    if not opcoes.uma_vez:
+        logger.info("Rodadas a cada %g minuto(s)", opcoes.intervalo_minutos)
 
     while True:
         publicadas = executar_rodada(fonte, repositorio, publicador)
