@@ -52,7 +52,8 @@ def test_extrai_produtos_da_pagina_de_categoria():
 
     husky = listagem.itens[0]
     assert husky.produto.preco_avista == Decimal("2999.99")
-    assert husky.produto.preco_de == Decimal("3529.4")
+    # oldPrice igual ao preço no cartão: a diferença para o Pix não é promoção.
+    assert husky.produto.preco_de is None
     assert husky.produto.disponivel is True
     assert husky.produto.cupom is None
     assert husky.url == (
@@ -132,7 +133,8 @@ def test_coleta_so_os_disponiveis_com_loja_url_e_cupom():
     assert [i.produto_id for i in itens] == ["996572", "694714"]
     assert itens[0].loja == "kabum"
     assert itens[0].url.endswith("/produto/996572/placa-de-video-husky-alpha-rtx-3060-nvidia-12gb-gddr6")
-    assert itens[0].preco_de.valor == Decimal("3529.4")
+    assert itens[0].preco_de is None
+    assert itens[1].preco_de.valor == Decimal("8235.28")  # riscado de verdade, acima do cartão
     assert itens[1].cupom == Cupom("ZAFADINHO10", Decimal("10"))
 
 

@@ -69,16 +69,26 @@ def extrair_produto(html: str) -> ProdutoKabum:
         preco_avista=Decimal(preco_avista),
         disponivel=bool(produto.get("available")),
         cupom=extrair_cupom(produto.get("stamps")),
-        preco_de=ler_preco_de(precos.get("oldPrice")),
+        preco_de=ler_preco_de(precos.get("oldPrice"), precos.get("price", produto.get("price"))),
     )
 
 
-def ler_preco_de(valor: Any) -> Optional[Decimal]:
-    """O "de" da Kabum é prices.oldPrice; vem 0 quando não há desconto anunciado."""
-    if valor is None:
+def ler_preco_de(antigo: Any, preco_cartao: Any) -> Optional[Decimal]:
+    """Devolve o preço "de" só quando ele é um preço riscado de verdade.
+
+    A Kabum mostra três valores: oldPrice, price (no cartão) e
+    priceWithDiscount (no Pix, uns 15% abaixo do cartão). Na maioria dos
+    produtos oldPrice é igual ao preço no cartão, e a diferença para o Pix é
+    só o desconto fixo de forma de pagamento, que vale sempre e não é
+    promoção. Por isso o "de" só conta quando está acima do preço no cartão.
+    Sem o preço no cartão não há como saber, e o "de" é descartado.
+    """
+    if antigo is None or preco_cartao is None:
         return None
-    preco = Decimal(valor)
-    return preco if preco > 0 else None
+    antigo, preco_cartao = Decimal(str(antigo)), Decimal(str(preco_cartao))
+    if antigo <= 0 or antigo <= preco_cartao:
+        return None
+    return antigo
 
 
 def extrair_cupom(selo: Any) -> Optional[Cupom]:
