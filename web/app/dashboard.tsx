@@ -10,7 +10,6 @@ import ProductCard from '../components/catalog/product-card';
 import PriceHistory from '../components/catalog/price-history';
 import CatalogStats from '../components/catalog/catalog-stats';
 import ProductFilters from '../components/catalog/product-filters';
-import Opportunities from '../components/catalog/opportunities';
 import {
   EMPTY_FILTERS,
   filterProducts,
@@ -41,6 +40,11 @@ export default function Dashboard({ catalog }: { catalog: Catalog }) {
   const priced = sortByLowestPrice(filtered);
   const chosen =
     filtered.find((p) => `${p.store}:${p.id}` === selected) ?? filtered[0];
+  const chosenIndex = chosen ? filtered.indexOf(chosen) : -1;
+  function navigateHistory(direction: number) {
+    const product = filtered[chosenIndex + direction];
+    if (product) setSelected(`${product.store}:${product.id}`);
+  }
   const refresh = () => startTransition(() => router.refresh());
   return (
     <>
@@ -52,30 +56,8 @@ export default function Dashboard({ catalog }: { catalog: Catalog }) {
           <Link href="/" className="brand" aria-label="Bufos Promo início">
             <Brand tagline />
           </Link>
-          <div className="header-actions">
-            <ThemeToggle />
-            <span className="source">
-              <i />
-              {catalog.source === 'json' ? 'Catálogo local' : 'PostgreSQL'}
-            </span>
-          </div>
-        </div>
-      </header>
-      <main id="content">
-        <div className="intro">
-          <div>
-            <p className="eyebrow">SEU RADAR DE ECONOMIA</p>
-            <h1>
-              De olho no preço certo<span>.</span>
-            </h1>
-          </div>
-          <button className="refresh" onClick={refresh} disabled={pending}>
-            {pending ? 'Atualizando…' : '↻ Atualizar dados'}
-          </button>
-        </div>
-        <CatalogStats products={products} filtered={filtered} priced={priced} />
-        <nav className="tabs" aria-label="Seções do painel">
-          {['Produtos', 'Histórico', 'Oportunidades'].map((s) => (
+        <nav className="section-nav" aria-label="Seções do painel">
+          {['Produtos', 'Histórico'].map((s) => (
             <button
               key={s}
               aria-current={section === s ? 'page' : undefined}
@@ -86,6 +68,24 @@ export default function Dashboard({ catalog }: { catalog: Catalog }) {
             </button>
           ))}
         </nav>
+          <div className="header-actions">
+            <ThemeToggle />
+          </div>
+        </div>
+      </header>
+      <main id="content">
+        <div className="intro">
+          <div>
+            <p className="eyebrow">MONITORAMENTO DE PREÇOS</p>
+            <h1>
+              Acompanhe cada preço<span>.</span>
+            </h1>
+          </div>
+          <button className="refresh" onClick={refresh} disabled={pending}>
+            {pending ? 'Atualizando…' : '↻ Atualizar dados'}
+          </button>
+        </div>
+        <CatalogStats products={products} filtered={filtered} priced={priced} />
         {catalog.error ? (
           <section className="empty error" role="alert">
             <h2>Não foi possível carregar os produtos</h2>
@@ -100,18 +100,6 @@ export default function Dashboard({ catalog }: { catalog: Catalog }) {
           </section>
         ) : (
           <>
-            <aside className="notice">
-              <strong>
-                {catalog.source === 'json'
-                  ? 'Links disponíveis. Preços ainda não compartilhados.'
-                  : 'Preços da última coleta registrada.'}
-              </strong>
-              <span>
-                {catalog.source === 'json'
-                  ? 'O catálogo usa as URLs reais do scraper. Preços e histórico em memória não estão acessíveis nesta página.'
-                  : 'Atualizar a página consulta os registros; não inicia uma coleta. Confirme o valor final na loja.'}
-              </span>
-            </aside>
             <ProductFilters
               products={products}
               filters={filters}
@@ -130,7 +118,11 @@ export default function Dashboard({ catalog }: { catalog: Catalog }) {
             </p>
             {section === 'Produtos' &&
               (filtered.length ? (
-                <div className="product-grid">
+                <div className="product-table-wrap" tabIndex={0} role="region" aria-label="Lista de produtos">
+                  <table className="product-table">
+                    <caption className="sr-only">Produtos monitorados e seus últimos preços registrados</caption>
+                    <thead><tr><th scope="col">Produto</th><th scope="col">Loja</th><th scope="col">Preço atual</th><th scope="col">Cupom</th><th scope="col">Desconto</th><th scope="col">Ações</th></tr></thead>
+                    <tbody>
                   {filtered.map((p) => (
                     <ProductCard
                       key={`${p.store}:${p.id}`}
@@ -138,6 +130,8 @@ export default function Dashboard({ catalog }: { catalog: Catalog }) {
                       onShowHistory={showHistory}
                     />
                   ))}
+                    </tbody>
+                  </table>
                 </div>
               ) : (
                 <div className="empty">
@@ -160,22 +154,40 @@ export default function Dashboard({ catalog }: { catalog: Catalog }) {
               <>
                 {chosen ? (
                   <>
-                    <label className="history-selector">
-                      Selecionar produto
-                      <select
-                        value={`${chosen.store}:${chosen.id}`}
-                        onChange={(e) => setSelected(e.target.value)}
-                      >
-                        {filtered.map((p) => (
-                          <option
-                            key={`${p.store}:${p.id}`}
-                            value={`${p.store}:${p.id}`}
-                          >
-                            {p.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <div className="history-navigation">
+                      <label className="history-selector">
+                        Selecionar produto
+                        <select
+                          value={`${chosen.store}:${chosen.id}`}
+                          onChange={(e) => setSelected(e.target.value)}
+                        >
+                          {filtered.map((p) => (
+                            <option
+                              key={`${p.store}:${p.id}`}
+                              value={`${p.store}:${p.id}`}
+                            >
+                              {p.label} · {p.store}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="history-navigation-actions" role="group" aria-label="Trocar produto do histórico">
+                        <button
+                          onClick={() => navigateHistory(-1)}
+                          disabled={chosenIndex <= 0}
+                        >
+                          ← Anterior
+                        </button>
+                        <span role="status">{chosenIndex + 1} de {filtered.length}</span>
+                        <button
+                          onClick={() => navigateHistory(1)}
+                          disabled={chosenIndex >= filtered.length - 1}
+                        >
+                          Próximo →
+                        </button>
+                      </div>
+                      <p className="history-navigation-hint">Use a busca acima para encontrar um produto pelo nome.</p>
+                    </div>
                     <PriceHistory product={chosen} />
                   </>
                 ) : (
@@ -189,7 +201,6 @@ export default function Dashboard({ catalog }: { catalog: Catalog }) {
                 )}
               </>
             )}
-            {section === 'Oportunidades' && <Opportunities priced={priced} />}
           </>
         )}
         <footer>

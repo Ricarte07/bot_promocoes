@@ -17,15 +17,19 @@ export const EMPTY_FILTERS: ProductFilters = {
   discount: '',
 };
 
+// Usa a mesma base do coletor: a que produz o maior desconto sobre o preço final.
+export function discountBase(product: Product): number | null {
+  const bases = [product.reference, product.listPrice].filter(
+    (value): value is number => value != null && value > 0,
+  );
+  return bases.length ? Math.max(...bases) : null;
+}
+
 export function calculateDiscount(product: Product): number | null {
-  if (
-    product.price === null ||
-    product.reference === null ||
-    product.reference <= 0
-  ) {
-    return null;
-  }
-  return Math.max(0, (1 - product.price / product.reference) * 100);
+  const base = discountBase(product);
+  const price = product.finalPrice ?? product.price;
+  if (price == null || base === null) return null;
+  return Math.max(0, (1 - price / base) * 100);
 }
 
 export function hasInvalidPriceRange(filters: ProductFilters): boolean {

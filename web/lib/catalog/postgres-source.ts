@@ -33,6 +33,7 @@ export function mapDatabaseProducts(data: DatabaseRows): Product[] {
     product.label = row.nome || product.label;
     product.price = Number(row.preco_atual);
     product.reference = Number(row.preco_referencia);
+    product.listPrice = row.preco_de == null ? null : Number(row.preco_de);
     product.updated = row.atualizada_em;
     product.coupon = row.cupom_codigo || null;
     product.couponDiscount = row.cupom_desconto_percentual == null ? null : Number(row.cupom_desconto_percentual);

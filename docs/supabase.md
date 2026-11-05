@@ -4,7 +4,7 @@ A coleta continua usando as mesmas lojas, regras de desconto e contrato de event
 O banco passa a guardar os produtos encontrados (inclusive os de categorias), nome,
 link, preços, cupons realmente encontrados e uma observação por coleta. Não há
 imagens, estoque ou condições de cupom inventadas.
-
+  
 ## Configuração inicial
 
 Na pasta oficial do projeto:

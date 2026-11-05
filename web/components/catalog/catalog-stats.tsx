@@ -40,7 +40,7 @@ export default function CatalogStats({
             .length.toString()
             .padStart(2, '0')}
         </strong>
-        <small>Em relação ao primeiro preço observado</small>
+        <small>Comparação com a referência registrada; pode incluir desconto Pix</small>
       </article>
     </div>
   );

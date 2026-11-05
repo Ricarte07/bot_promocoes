@@ -113,10 +113,29 @@ class DownloadFalso:
         return resultado
 
 
+def pagina_de_produto(item):
+    produto = item.produto
+    dados = {"props": {"pageProps": {"product": {
+        "id": produto.produto_id, "title": produto.nome, "available": produto.disponivel,
+        "prices": {"priceWithDiscount": str(produto.preco_avista),
+                   "oldPrice": str(produto.preco_de or 0)}, "stamps": (
+            {"title": f"CUPOM {produto.cupom.codigo}",
+             "description": f"Use o cupom {produto.cupom.codigo} e ganhe {produto.cupom.desconto_percentual}% OFF"}
+            if produto.cupom and produto.cupom.desconto_percentual is not None else None),
+    }}}}
+    return f'<script id="__NEXT_DATA__" type="application/json">{json.dumps(dados)}</script>'
+
+
 def montar(paginas: dict[str, str], listagens: list[ProdutoMonitorado]):
     baixar = DownloadFalso(paginas)
     esperas: list[float] = []
-    coletor = ColetorListagemKabum(listagens, baixar=baixar, intervalo_segundos=2.0, esperar=esperas.append)
+    produtos = {
+        item.url: pagina_de_produto(item)
+        for html in paginas.values() if isinstance(html, str)
+        for item in extrair_listagem(html).itens
+    }
+    coletor = ColetorListagemKabum(listagens, baixar=baixar,
+        baixar_produto=DownloadFalso(produtos), intervalo_segundos=2.0, esperar=esperas.append)
     return coletor, baixar, esperas
 
 
@@ -148,7 +167,7 @@ def test_segue_paginas_ate_o_limite_configurado_e_espera_entre_elas():
 
     assert [i.produto_id for i in itens] == ["1", "2"]
     assert baixar.urls_pedidas == [URL_LISTAGEM, URL_LISTAGEM + "?page_number=2&page_size=60"]
-    assert esperas == [2.0]
+    assert esperas == [2.0, 2.0, 2.0]
 
 
 def test_para_na_ultima_pagina_mesmo_com_limite_maior():
@@ -170,3 +189,26 @@ def test_falha_em_uma_listagem_nao_derruba_a_rodada():
     )
 
     assert [i.produto_id for i in coletor.coletar()] == ["1"]
+
+
+def test_pagina_individual_corrige_preco_desatualizado_da_categoria():
+    html_listagem = pagina_de_listagem([item(996572, "2999.99")])
+    pagina = {"props": {"pageProps": {"product": {
+        "id": 996572, "title": "Husky", "available": True,
+        "prices": {"priceWithDiscount": "2109.00", "oldPrice": "2999.99"},
+    }}}}
+    html_produto = f'<script id="__NEXT_DATA__" type="application/json">{json.dumps(pagina)}</script>'
+    coletor = ColetorListagemKabum([listagem()], baixar=lambda _: html_listagem,
+        baixar_produto=lambda _: html_produto, intervalo_segundos=0)
+    [coletado] = coletor.coletar()
+    assert coletado.produto_id == "996572"
+    assert coletado.preco.valor == Decimal("2109.00")
+    assert coletado.preco_de.valor == Decimal("2999.99")
+
+
+def test_falha_na_confirmacao_nao_grava_preco_da_categoria(caplog):
+    html_listagem = pagina_de_listagem([item(996572, "2999.99")])
+    coletor = ColetorListagemKabum([listagem()], baixar=lambda _: html_listagem,
+        baixar_produto=lambda _: "<html>sem produto</html>", intervalo_segundos=0)
+    assert coletor.coletar() == []
+    assert "não confirmei o preço" in caplog.text

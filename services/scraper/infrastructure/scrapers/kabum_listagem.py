@@ -27,6 +27,7 @@ from infrastructure.scrapers.kabum import (
     LOJA,
     ProdutoKabum,
     extrair_cupom,
+    extrair_produto,
     ler_preco_de,
 )
 
@@ -124,9 +125,11 @@ class ColetorListagemKabum(ColetorDePrecos):
         baixar: Callable[[str], str] = baixar_html,
         intervalo_segundos: float = 2.0,
         esperar: Callable[[float], None] = time.sleep,
+        baixar_produto: Callable[[str], str] = baixar_html,
     ):
         self.listagens = list(listagens)
         self._baixar = baixar
+        self._baixar_produto = baixar_produto
         self._intervalo = intervalo_segundos
         self._esperar = esperar
 
@@ -164,5 +167,20 @@ class ColetorListagemKabum(ColetorDePrecos):
         return listagem
 
     def _converter(self, listagem: ListagemKabum) -> list[PrecoColetado]:
-        itens = (converter(item.produto, item.url, self.loja) for item in listagem.itens)
-        return [item for item in itens if item is not None]
+        coletados = []
+        for item in listagem.itens:
+            if not item.produto.disponivel:
+                continue
+            if self._intervalo > 0:
+                self._esperar(self._intervalo)
+            try:
+                produto = extrair_produto(self._baixar_produto(item.url))
+                if produto.produto_id != item.produto.produto_id:
+                    raise PaginaInvalida("a página individual retornou outro produto")
+            except (requests.RequestException, PaginaInvalida, ValueError) as erro:
+                logger.warning("%s: não confirmei o preço de %s: %s", self.loja, item.url, erro)
+                continue
+            coletado = converter(produto, item.url, self.loja)
+            if coletado is not None:
+                coletados.append(coletado)
+        return coletados
