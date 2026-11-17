@@ -26,7 +26,7 @@ test('catalog reads real URLs and handles missing or invalid data without fabric
     delete process.env.DATABASE_URL;
     process.env.CATALOG_SOURCE = 'json';
     process.env.PRODUCTS_FILE = path.resolve(
-      '../services/scraper/produtos.json',
+      '../scraper/produtos.json',
     );
     const catalog = await getCatalog();
     assert.equal(catalog.error, false);

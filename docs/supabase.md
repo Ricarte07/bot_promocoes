@@ -81,10 +81,10 @@ crie políticas para esse papel; não libere acesso público para corrigir uma f
 | `TEST_DATABASE_URL` | Somente testes: banco local separado com nome terminado em `_test` e usuário com CREATEDB. |
 
 Scraper e Go já carregam o `.env` da raiz. A web agora também carrega esse arquivo;
-variáveis já definidas no ambiente ou por `web/.env.local` têm prioridade. Execute a
-web dentro de `web/` e o Go dentro de `services/notifier/`. Reinicie os serviços
+variáveis já definidas no ambiente ou por `services/web/.env.local` têm prioridade. Execute a
+web dentro de `services/web/` e o Go dentro de `services/notifier/`. Reinicie os serviços
 após mudar a configuração. Para a web, ajuste SCRAPER_PYTHON para o caminho do
-ambiente virtual (o exemplo relativo funciona quando iniciada em `web/`).
+ambiente virtual (o exemplo relativo funciona quando iniciada em `services/web/`).
 
 ## Executar sem enviar notificações
 
@@ -125,7 +125,7 @@ individual de `ofertas` e novas linhas de histórico. Produtos coletados continu
 visíveis no catálogo mesmo se o endereço de entrada for desativado; a data informa
 quando foram vistos pela última vez. O sistema ainda não marca produtos expirados.
 
-Na pasta `web/`:
+Na pasta `services/web/`:
 
 ```bash
 npm ci
@@ -194,10 +194,10 @@ Os testes cobrem reinício, cupons conhecidos/desconhecidos/removidos, históric
 produtos de categoria, rollback, concorrência, RLS e publicação console/Redis
 (com cliente Redis simulado, sem enviar notificações).
 
-Na pasta `web/`, usando o mesmo TEST_DATABASE_URL exportado:
+Na pasta `services/web/`, usando o mesmo TEST_DATABASE_URL exportado:
 
 ```bash
-export SCRAPER_PYTHON='../services/scraper/.venv/bin/python'
+export SCRAPER_PYTHON='../scraper/.venv/bin/python'
 node --experimental-strip-types --test tests/*.test.mjs
 npm run lint
 npx tsc --noEmit
