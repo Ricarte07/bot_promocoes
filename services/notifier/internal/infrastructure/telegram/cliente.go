@@ -16,8 +16,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/Ricarte07/bot_promocoes/notifier/internal/domain"
@@ -141,17 +143,29 @@ func (c *Cliente) respeitarIntervalo(ctx context.Context) error {
 	return c.dormir(ctx, c.intervalo-decorrido)
 }
 
+// semURL tira a URL das mensagens de erro do net/http e do net/url. A URL da
+// Bot API carrega o token, e esses erros chegam ao log do consumidor. A causa
+// continua embrulhada: errors.Is segue reconhecendo, por exemplo,
+// context.Canceled.
+func semURL(err error) error {
+	var erroURL *url.Error
+	if errors.As(err, &erroURL) {
+		return fmt.Errorf("%s: %w", erroURL.Op, erroURL.Err)
+	}
+	return err
+}
+
 func (c *Cliente) enviar(ctx context.Context, corpo []byte) (int, respostaAPI, error) {
-	url := fmt.Sprintf("%s/bot%s/sendMessage", c.urlBase, c.token)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(corpo))
+	endereco := fmt.Sprintf("%s/bot%s/sendMessage", c.urlBase, c.token)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endereco, bytes.NewReader(corpo))
 	if err != nil {
-		return 0, respostaAPI{}, err
+		return 0, respostaAPI{}, fmt.Errorf("telegram: montar requisição: %w", semURL(err))
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return 0, respostaAPI{}, fmt.Errorf("telegram: %w", err)
+		return 0, respostaAPI{}, fmt.Errorf("telegram: %w", semURL(err))
 	}
 	defer resp.Body.Close()
 
