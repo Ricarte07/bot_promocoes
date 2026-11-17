@@ -287,3 +287,52 @@ func TestServidorForaDoArViraErro(t *testing.T) {
 		t.Fatal("esperava erro de conexão")
 	}
 }
+
+// O token faz parte da URL da Bot API. O erro de rede do net/http traz a URL
+// inteira e acaba no log do consumidor: o token não pode aparecer nele.
+func TestErroDeConexaoNaoExpoeOToken(t *testing.T) {
+	servidor, _ := servidorFalso(t, ok200)
+	servidor.Close()
+	cliente, _ := clienteDeTeste(t, servidor)
+
+	err := cliente.Notificar(context.Background(), promocaoExemplo())
+
+	if err == nil {
+		t.Fatal("esperava erro de conexão")
+	}
+	if strings.Contains(err.Error(), "123:ABC") {
+		t.Fatalf("o erro expõe o token: %v", err)
+	}
+	if !strings.HasPrefix(err.Error(), "telegram: ") {
+		t.Errorf("o erro deveria continuar identificando o Telegram: %v", err)
+	}
+}
+
+func TestURLInvalidaNaoExpoeOToken(t *testing.T) {
+	cliente := NovoCliente("123:ABC", "-100777", ComURLBase("http://[::1"))
+
+	err := cliente.Notificar(context.Background(), promocaoExemplo())
+
+	if err == nil {
+		t.Fatal("esperava erro de URL inválida")
+	}
+	if strings.Contains(err.Error(), "123:ABC") {
+		t.Fatalf("o erro expõe o token: %v", err)
+	}
+}
+
+func TestContextoCanceladoContinuaReconhecivelSemExporOToken(t *testing.T) {
+	servidor, _ := servidorFalso(t, ok200)
+	cliente, _ := clienteDeTeste(t, servidor)
+	ctx, cancelar := context.WithCancel(context.Background())
+	cancelar()
+
+	err := cliente.Notificar(ctx, promocaoExemplo())
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("o cancelamento precisa continuar detectável com errors.Is: %v", err)
+	}
+	if strings.Contains(err.Error(), "123:ABC") {
+		t.Fatalf("o erro expõe o token: %v", err)
+	}
+}
