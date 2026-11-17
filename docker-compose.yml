@@ -3,7 +3,7 @@ services:
     image: redis:7-alpine
     container_name: promo-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     # Persiste o stream em disco para sobreviver a um restart do container.
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -14,5 +14,28 @@ services:
       timeout: 3s
       retries: 5
 
+  # Banco oficial do bot (ver docs/banco.md). O Supabase fica para testes compartilhados.
+  postgres:
+    image: postgres:16
+    container_name: promo-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-promo}
+      POSTGRES_DB: ${POSTGRES_DB:-promo}
+      # Sem valor padrão de propósito: a senha vem só do .env, que não vai para o Git.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env (veja .env.example)}
+    # Só nesta máquina: a porta não fica exposta na rede da empresa.
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-dados:/var/lib/postgresql/data
+      # Aplicado automaticamente só na primeira subida, com o volume ainda vazio.
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   redis-dados:
+  postgres-dados:

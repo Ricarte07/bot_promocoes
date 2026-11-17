@@ -1,6 +1,6 @@
 # Bufos Promo
 
-Interface Next.js/React do bot. Veja [a configuração compartilhada do Supabase](../../docs/supabase.md).
+Interface Next.js/React do bot. Veja [o guia do banco de dados](../../docs/banco.md).
 
 ## Executar
 
@@ -19,7 +19,7 @@ A memória do processo Python não é acessível ao Next.js. Por isso o modo JSO
 
 ## PostgreSQL / Supabase
 
-O scraper agora grava as tabelas de `sql/schema.sql`; siga `docs/supabase.md` antes de selecionar PostgreSQL. O painel só consulta, sem criar tabelas nem executar coletas. O `.env` da raiz também é carregado, preservando valores já definidos pelo ambiente ou por `services/web/.env.local`. `CATALOG_SOURCE=postgres` seleciona o banco explicitamente.
+O scraper agora grava as tabelas de `sql/schema.sql`; siga `docs/banco.md` antes de selecionar PostgreSQL. O painel só consulta, sem criar tabelas nem executar coletas. O `.env` da raiz também é carregado, preservando valores já definidos pelo ambiente ou por `services/web/.env.local`. `CATALOG_SOURCE=postgres` seleciona o banco explicitamente.
 
 O servidor Next.js utiliza um subprocesso Python com a dependência `psycopg`, que precisa estar instalada no ambiente Python. Configure no ambiente do servidor (ou em `services/web/.env.local`):
 
@@ -52,7 +52,7 @@ Verificação manual: combinar filtros, limpar, abrir histórico sem registros, 
 
 Teste da fonte de dados (Node 24): `node --experimental-strip-types --test tests/*.test.mjs`.
 
-Para incluir a leitura de um PostgreSQL real, use TEST_DATABASE_URL e SCRAPER_PYTHON conforme `docs/supabase.md`. O banco descartável de teste não envia notificações.
+Para incluir a leitura de um PostgreSQL real, use TEST_DATABASE_URL e SCRAPER_PYTHON conforme `docs/banco.md`. O banco descartável de teste não envia notificações.
 
 ## Como o código está organizado
 

@@ -15,8 +15,13 @@ docs/           contrato do evento e guia do banco
 
 Cada serviço tem seu próprio README com como rodar e testar.
 
-A configuração PostgreSQL/Supabase, comandos de execução, testes sem envio de
-mensagens e o plano para a futura fila PostgreSQL estão em
-[docs/supabase.md](docs/supabase.md). Comece pelo `.env.example` e por `sql/schema.sql`.
+## Começando
 
-O Redis permanece disponível. A fila PostgreSQL ainda não tem consumidor Go.
+```bash
+cp .env.example .env              # preencha a senha do banco e, se for usar, o Telegram
+docker compose up -d postgres redis
+```
+
+O banco oficial é o Postgres do Docker; o Supabase fica para testes compartilhados.
+Configuração, comandos sem envio de mensagens, testes com banco e o plano da futura
+fila PostgreSQL estão em [docs/banco.md](docs/banco.md).
