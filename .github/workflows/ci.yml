@@ -1,0 +1,103 @@
+# Roda os testes dos três serviços em todo push e PR para develop.
+# Nada aqui acessa lojas, Redis real, Telegram ou o Supabase: o Postgres é um
+# container descartável criado só para os testes de integração.
+name: CI
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+
+# Um push novo no mesmo PR cancela a execução anterior.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Banco de testes: os testes criam e apagam bancos próprios a partir deste.
+  TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bot_promocoes_test?sslmode=disable
+
+jobs:
+  scraper:
+    name: scraper (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/scraper
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bot_promocoes_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: services/scraper/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: pytest -q
+
+  notifier:
+    name: notifier (Go)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/notifier
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: services/notifier/go.mod
+          cache-dependency-path: services/notifier/go.sum
+      - run: go vet ./...
+      - run: go test ./...
+
+  web:
+    name: web (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/web
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bot_promocoes_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: services/web/package-lock.json
+      # O painel lê o Postgres por um subprocesso Python com psycopg; o teste
+      # de integração grava pelo caso de uso do scraper e lê pela web.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: services/scraper/requirements.txt
+      - run: pip install -r ../scraper/requirements.txt
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: node --experimental-strip-types --test tests/*.test.mjs
+        env:
+          SCRAPER_PYTHON: python
+      - run: npm run build
