@@ -1,10 +1,10 @@
 # Bufos Promo
 
-Interface Next.js/React do bot. Veja [a configuração compartilhada do Supabase](../docs/supabase.md).
+Interface Next.js/React do bot. Veja [a configuração compartilhada do Supabase](../../docs/supabase.md).
 
 ## Executar
 
-Na pasta `web`:
+Na pasta `services/web`:
 
 ```bash
 npm ci
@@ -13,15 +13,15 @@ npm run dev
 
 Abra http://localhost:3000. Para produção, `npm run build` e `npm start`.
 
-Com `CATALOG_SOURCE=json` (ou sem `DATABASE_URL` e sem seleção explícita), a página lê `../services/scraper/produtos.json` em cada atualização. `PRODUCTS_FILE` permite selecionar outro arquivo (prefira caminho absoluto). Execute os comandos a partir de `web` e mantenha o arquivo disponível no servidor.
+Com `CATALOG_SOURCE=json` (ou sem `DATABASE_URL` e sem seleção explícita), a página lê `../scraper/produtos.json` em cada atualização. `PRODUCTS_FILE` permite selecionar outro arquivo (prefira caminho absoluto). Execute os comandos a partir de `services/web` e mantenha o arquivo disponível no servidor.
 
 A memória do processo Python não é acessível ao Next.js. Por isso o modo JSON mostra links reais, identificação derivada da URL e estados de ausência para preço, imagem e histórico. Nenhum valor é simulado e nenhuma coleta é iniciada pelo painel.
 
 ## PostgreSQL / Supabase
 
-O scraper agora grava as tabelas de `sql/schema.sql`; siga `docs/supabase.md` antes de selecionar PostgreSQL. O painel só consulta, sem criar tabelas nem executar coletas. O `.env` da raiz também é carregado, preservando valores já definidos pelo ambiente ou por `web/.env.local`. `CATALOG_SOURCE=postgres` seleciona o banco explicitamente.
+O scraper agora grava as tabelas de `sql/schema.sql`; siga `docs/supabase.md` antes de selecionar PostgreSQL. O painel só consulta, sem criar tabelas nem executar coletas. O `.env` da raiz também é carregado, preservando valores já definidos pelo ambiente ou por `services/web/.env.local`. `CATALOG_SOURCE=postgres` seleciona o banco explicitamente.
 
-O servidor Next.js utiliza um subprocesso Python com a dependência `psycopg`, que precisa estar instalada no ambiente Python. Configure no ambiente do servidor (ou em `web/.env.local`):
+O servidor Next.js utiliza um subprocesso Python com a dependência `psycopg`, que precisa estar instalada no ambiente Python. Configure no ambiente do servidor (ou em `services/web/.env.local`):
 
 ```dotenv
 DATABASE_URL=postgresql://USUARIO:SENHA_CODIFICADA@HOST:5432/BANCO?sslmode=require

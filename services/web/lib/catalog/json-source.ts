@@ -6,7 +6,7 @@ import type { Product } from './types';
 export async function readJsonProducts(): Promise<Product[]> {
   const filePath =
     process.env.PRODUCTS_FILE ||
-    path.resolve(process.cwd(), '../services/scraper/produtos.json');
+    path.resolve(process.cwd(), '../scraper/produtos.json');
   const contents = await readFile(filePath, 'utf8');
   const rows = JSON.parse(contents);
 

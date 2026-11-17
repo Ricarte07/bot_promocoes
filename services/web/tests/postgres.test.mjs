@@ -53,7 +53,7 @@ print(json.dumps(dict(name=name,url=make_conninfo(url,dbname=name))))
 import os,sys
 from pathlib import Path
 from decimal import Decimal
-sys.path.insert(0,str(Path('../services/scraper').resolve()))
+sys.path.insert(0,str(Path('../scraper').resolve()))
 from infrastructure.persistencia.postgres import conectar,OfertaRepositorioPostgres
 from infrastructure.mensageria.postgres import PublicadorPostgres
 from application.processar_coleta import ProcessarColeta
@@ -64,7 +64,7 @@ class Coletor:
     def coletar(self):
         return [PrecoColetado('999','kabum',Preco(Decimal('100')),'Descoberto na categoria','https://www.kabum.com.br/produto/999/exemplo',Cupom('CODIGO'))]
 with conectar(os.environ['DATABASE_URL']) as c:
-    c.execute(Path('../sql/schema.sql').read_text())
+    c.execute(Path('../../sql/schema.sql').read_text())
     ProcessarColeta(Coletor(),OfertaRepositorioPostgres(c),PublicadorPostgres(c)).executar()
 `);
       const products = await readPostgresProducts();

@@ -1,11 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-// Next carrega web/.env.local. A raiz é compartilhada com scraper e notifier.
+// Next carrega services/web/.env.local. A raiz é compartilhada com scraper e notifier.
 export async function loadProjectEnv() {
   let contents: string;
   try {
-    contents = await readFile(path.resolve(process.cwd(), '../.env'), 'utf8');
+    contents = await readFile(path.resolve(process.cwd(), '../../.env'), 'utf8');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
     throw error;
