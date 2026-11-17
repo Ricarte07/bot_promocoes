@@ -20,8 +20,10 @@ def pagina_kabum(produto):
 
 def test_kabum_separa_avista_original_e_cupom_sem_somar_descontos():
     produto = extrair_kabum(pagina_kabum({
-        'id': 1, 'title': 'Placa', 'available': True, 'price': 3000,
-        'prices': {'priceWithDiscount': 2400, 'oldPrice': 3000},
+        # Cartão 2823.53, Pix 2400 (15% fixo) e "de" 3000: só o "de" acima do
+        # cartão é desconto de verdade; a diferença do Pix não é promoção.
+        'id': 1, 'title': 'Placa', 'available': True, 'price': 2823.53,
+        'prices': {'price': 2823.53, 'priceWithDiscount': 2400, 'oldPrice': 3000},
         'stamps': {'title': 'CUPOM DEZ', 'description': 'Use o cupom DEZ e ganhe 10% OFF'},
     }))
     assert produto.preco_avista == Decimal('2400')

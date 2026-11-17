@@ -1,4 +1,5 @@
 import json
+import re
 from decimal import Decimal
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from infrastructure.scrapers.kabum_listagem import (
     ColetorListagemKabum,
     extrair_listagem,
     url_da_pagina,
+    url_do_produto,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -114,15 +116,25 @@ class DownloadFalso:
         return resultado
 
 
-def pagina_de_produto(item):
-    produto = item.produto
+def itens_crus(html_listagem: str) -> list[dict]:
+    """Os itens do catálogo como a Kabum os entrega, antes de qualquer conversão."""
+    bloco = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html_listagem, re.S)
+    dados = json.loads(bloco.group(1))["props"]["pageProps"]["data"]
+    return json.loads(dados)["catalogServer"]["data"]
+
+
+def pagina_de_produto(cru: dict) -> str:
+    """Página individual com os mesmos dados do item da listagem.
+
+    Leva os três preços da Kabum (cartão, Pix e "de"): sem o preço no cartão
+    não dá para saber se o "de" é desconto de verdade ou só o desconto do Pix.
+    """
     dados = {"props": {"pageProps": {"product": {
-        "id": produto.produto_id, "title": produto.nome, "available": produto.disponivel,
-        "prices": {"priceWithDiscount": str(produto.preco_avista),
-                   "oldPrice": str(produto.preco_de or 0)}, "stamps": (
-            {"title": f"CUPOM {produto.cupom.codigo}",
-             "description": f"Use o cupom {produto.cupom.codigo} e ganhe {produto.cupom.desconto_percentual}% OFF"}
-            if produto.cupom and produto.cupom.desconto_percentual is not None else None),
+        "id": cru["code"], "title": cru.get("name", ""), "available": cru.get("available"),
+        "price": cru.get("price"),
+        "prices": {"price": cru.get("price"), "priceWithDiscount": cru.get("priceWithDiscount"),
+                   "oldPrice": cru.get("oldPrice")},
+        "stamps": cru.get("stamps"),
     }}}}
     return f'<script id="__NEXT_DATA__" type="application/json">{json.dumps(dados)}</script>'
 
@@ -131,9 +143,9 @@ def montar(paginas: dict[str, str], listagens: list[ProdutoMonitorado]):
     baixar = DownloadFalso(paginas)
     esperas: list[float] = []
     produtos = {
-        item.url: pagina_de_produto(item)
+        url_do_produto(cru["code"], cru.get("friendlyName") or ""): pagina_de_produto(cru)
         for html in paginas.values() if isinstance(html, str)
-        for item in extrair_listagem(html).itens
+        for cru in itens_crus(html) if "code" in cru
     }
     coletor = ColetorListagemKabum(listagens, baixar=baixar,
         baixar_produto=DownloadFalso(produtos), intervalo_segundos=2.0, esperar=esperas.append)
@@ -197,7 +209,9 @@ def test_pagina_individual_corrige_preco_desatualizado_da_categoria():
     html_listagem = pagina_de_listagem([item(996572, "2999.99")])
     pagina = {"props": {"pageProps": {"product": {
         "id": 996572, "title": "Husky", "available": True,
-        "prices": {"priceWithDiscount": "2109.00", "oldPrice": "2999.99"},
+        # Cartão abaixo do "de": o riscado é desconto de verdade, não só o do Pix.
+        "price": "2481.18",
+        "prices": {"price": "2481.18", "priceWithDiscount": "2109.00", "oldPrice": "2999.99"},
     }}}}
     html_produto = f'<script id="__NEXT_DATA__" type="application/json">{json.dumps(pagina)}</script>'
     coletor = ColetorListagemKabum([listagem()], baixar=lambda _: html_listagem,
