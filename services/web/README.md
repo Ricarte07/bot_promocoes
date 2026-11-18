@@ -35,7 +35,7 @@ SCRAPER_PYTHON=/caminho/absoluto/para/venv/bin/python
 - Busca, loja, mínimo/máximo e desconto funcionam em conjunto em todas as seções. Limpar restaura a seleção. Produtos com dados ausentes não passam por filtros que exigem esses dados.
 - Estatísticas refletem a seleção. Menor preço compara valores nominais de produtos distintos, sem afirmar melhor custo-benefício.
 - Desconto compara o preço final (com cupom conhecido) com a maior base entre o primeiro preço coletado e o preço “de” informado pela loja, conforme o domínio; não equivale a um novo evento de promoção.
-- Histórico: menor preço de todas as observações disponíveis, gráfico temporal a partir de duas coletas e tabela acessível. Datas em America/Fortaleza.
+- Histórico: o painel recebe, por produto, só a primeira coleta, cada mudança de preço e a coleta mais recente (coletas repetidas com o mesmo preço ficam no banco, fora da tela). Menor preço registrado, gráfico temporal a partir de dois pontos e tabela acessível. Datas em America/Fortaleza.
 - Atualização manual consulta novamente a fonte; não executa o scraper. Não há gravações no banco ou no navegador.
 - Nome e cupom vêm da oferta persistida, quando coletados. Imagem, estoque e resultado da última tentativa de coleta não estão persistidos. A data mostrada é a da oferta registrada, não uma garantia de preço vigente.
 - O catálogo e todo seu histórico são carregados juntos. Para catálogos grandes, uma evolução futura deve incluir paginação e consulta do histórico por produto.

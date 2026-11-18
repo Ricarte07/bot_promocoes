@@ -67,7 +67,7 @@ export default function PriceHistory({ product }: { product: Product }) {
           )}
           <div className="table-wrap">
             <table>
-              <caption>Observações registradas (horário de Fortaleza)</caption>
+              <caption>Primeira coleta, mudanças de preço e coleta mais recente (horário de Fortaleza)</caption>
               <thead>
                 <tr>
                   <th>Data da coleta</th>
