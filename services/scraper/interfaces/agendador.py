@@ -18,7 +18,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from application.portas import (
     TIPO_LISTAGEM,
@@ -185,6 +185,74 @@ def montar_parser() -> argparse.ArgumentParser:
     return parser
 
 
+ESPERA_APOS_FALHA_SEGUNDOS = 60
+
+
+class ConexaoSobDemanda:
+    """Factory Method aplicado à conexão: entrega sempre uma conexão viva.
+
+    A conexão PostgreSQL fica ociosa entre as rodadas e pode ser derrubada pelo
+    servidor, pela rede ou por um reinício do container. Antes de cada rodada,
+    se a anterior estiver fechada ou quebrada, ela é descartada e a fábrica
+    abre outra. Se o banco ainda estiver fora do ar, o erro sobe para a rodada,
+    e a próxima chamada tenta de novo.
+    """
+
+    def __init__(self, fabrica: Callable[[], Any]):
+        self._fabrica = fabrica
+        self._conexao: Any = None
+
+    def obter(self) -> Any:
+        conexao = self._conexao
+        if conexao is None or conexao.closed or getattr(conexao, "broken", False):
+            if conexao is not None:
+                logger.warning("Conexão PostgreSQL perdida; abrindo uma nova")
+            self.fechar()
+            self._conexao = self._fabrica()
+        return self._conexao
+
+    def fechar(self) -> None:
+        conexao, self._conexao = self._conexao, None
+        if conexao is None:
+            return
+        try:
+            conexao.close()
+        except Exception:
+            pass  # já estava quebrada; não há o que liberar
+
+
+def executar_em_laco(
+    rodada: Callable[[], int],
+    intervalo_segundos: float,
+    uma_vez: bool = False,
+    esperar: Callable[[float], None] = time.sleep,
+) -> None:
+    """Roda a rodada para sempre; uma rodada com erro não derruba o scraper.
+
+    Depois de uma falha, tenta de novo em 1 minuto (ou no intervalo, se for
+    menor), para não ficar meia hora parado por uma queda rápida do banco.
+    Com uma_vez, o erro sobe para quem chamou encerrar com código de falha.
+    """
+    while True:
+        try:
+            publicadas = rodada()
+        except Exception as erro:
+            if uma_vez:
+                raise
+            espera = min(intervalo_segundos, ESPERA_APOS_FALHA_SEGUNDOS)
+            # Só o tipo do erro: a mensagem de drivers pode carregar DSN e senha.
+            logger.error(
+                "Rodada falhou (%s); nova tentativa em %g segundo(s)",
+                type(erro).__name__, espera,
+            )
+        else:
+            logger.info("Rodada concluída: %d promoção(ões) publicada(s)", publicadas)
+            if uma_vez:
+                return
+            espera = intervalo_segundos
+        esperar(espera)
+
+
 def main(argumentos: Optional[list[str]] = None) -> None:
     carregar_dotenv(ENV_PADRAO)
     parser = montar_parser()
@@ -205,40 +273,49 @@ def main(argumentos: Optional[list[str]] = None) -> None:
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
 
-    conexao = None
+    usa_postgres = opcoes.persistencia == "postgres" or opcoes.fonte_produtos == "postgres"
+    conexoes: Optional[ConexaoSobDemanda] = None
     try:
-        if opcoes.persistencia == "postgres" or opcoes.fonte_produtos == "postgres":
-            from infrastructure.persistencia.postgres import (
-                FonteDeProdutosPostgres, OfertaRepositorioPostgres, conectar,
-            )
-            conexao = conectar(os.environ.get("DATABASE_URL", ""))
-        fonte = (FonteDeProdutosPostgres(conexao) if opcoes.fonte_produtos == "postgres"
-                 else FonteDeProdutosJson(opcoes.produtos))
-        repositorio = (OfertaRepositorioPostgres(conexao) if opcoes.persistencia == "postgres"
-                       else OfertaRepositorioEmMemoria())
-        if opcoes.eventos == "postgres":
+        if usa_postgres:
+            from infrastructure.persistencia import postgres
             from infrastructure.mensageria.postgres import PublicadorPostgres
-            publicador = PublicadorPostgres(conexao)
-        else:
-            publicador = montar_publicador(opcoes.redis_url if opcoes.eventos == "redis" else None)
+
+            conexoes = ConexaoSobDemanda(
+                lambda: postgres.conectar(os.environ.get("DATABASE_URL", ""))
+            )
+            conexoes.obter()  # configuração errada derruba já na partida, não na primeira rodada
+
+        # O que não depende da conexão é criado uma vez: a memória precisa durar entre
+        # rodadas, e o cliente Redis já reconecta sozinho no próximo comando.
+        repositorio_memoria = OfertaRepositorioEmMemoria() if opcoes.persistencia == "memoria" else None
+        publicador_fixo = (
+            None if opcoes.eventos == "postgres"
+            else montar_publicador(opcoes.redis_url if opcoes.eventos == "redis" else None)
+        )
+
+        def rodada() -> int:
+            # Peças ligadas ao banco são montadas a cada rodada sobre uma conexão viva.
+            conexao = conexoes.obter() if conexoes else None
+            fonte = (postgres.FonteDeProdutosPostgres(conexao) if opcoes.fonte_produtos == "postgres"
+                     else FonteDeProdutosJson(opcoes.produtos))
+            repositorio = (postgres.OfertaRepositorioPostgres(conexao)
+                           if opcoes.persistencia == "postgres" else repositorio_memoria)
+            publicador = PublicadorPostgres(conexao) if opcoes.eventos == "postgres" else publicador_fixo
+            return executar_rodada(fonte, repositorio, publicador)
 
         if not opcoes.uma_vez:
             logger.info("Rodadas a cada %g minuto(s)", opcoes.intervalo_minutos)
-
-        while True:
-            publicadas = executar_rodada(fonte, repositorio, publicador)
-            logger.info("Rodada concluída: %d promoção(ões) publicada(s)", publicadas)
-            if opcoes.uma_vez:
-                break
-            time.sleep(opcoes.intervalo_minutos * 60)
+        executar_em_laco(
+            rodada, opcoes.intervalo_minutos * 60, uma_vez=opcoes.uma_vez, esperar=time.sleep
+        )
     except Exception:
         # Drivers podem incluir credenciais na mensagem de erro; não imprimir traceback/DSN.
         logger.error("Coleta interrompida. Confira a configuração escolhida, conexão, SSL e "
                      "tabelas de sql/schema.sql. Não houve troca automática para memória.")
         raise SystemExit(1) from None
     finally:
-        if conexao is not None:
-            conexao.close()
+        if conexoes is not None:
+            conexoes.fechar()
 
 
 if __name__ == "__main__":
