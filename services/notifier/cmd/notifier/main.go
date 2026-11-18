@@ -10,7 +10,7 @@
 //	TELEGRAM_BOT_TOKEN            token dado pelo @BotFather
 //	TELEGRAM_CHAT_ID              chat, grupo ou canal que recebe as mensagens
 //	TELEGRAM_INTERVALO_SEGUNDOS   pausa mínima entre mensagens; padrão 1.1
-//	REDIS_URL                     padrão redis://localhost:6379/0
+//	REDIS_URL                     padrão redis://127.0.0.1:6379/0
 package main
 
 import (
@@ -100,7 +100,7 @@ func carregarConfig() (config, error) {
 		redisURL:      os.Getenv("REDIS_URL"),
 	}
 	if cfg.redisURL == "" {
-		cfg.redisURL = "redis://localhost:6379/0"
+		cfg.redisURL = "redis://127.0.0.1:6379/0"
 	}
 	if cfg.tokenTelegram == "" || strings.HasPrefix(cfg.tokenTelegram, "coloque_") {
 		return cfg, errors.New("defina TELEGRAM_BOT_TOKEN")
