@@ -27,6 +27,35 @@ test('ofertas descobertas em categorias usam nome e ID coletados, sem depender d
   assert.equal(product.history.length, 1);
 });
 
+test('histórico de cada produto fica só com as observações dele, em ordem', () => {
+  const offer = (loja, produto_id) => ({ loja, produto_id, nome: produto_id,
+    url: `https://www.kabum.com.br/produto/${produto_id}/x`, preco_atual: '10',
+    preco_referencia: '10', preco_final: '10', atualizada_em: '2026-11-18' });
+  const point = (loja, produto_id, preco, coletado_em) => ({ loja, produto_id, preco, coletado_em });
+  const [kabumA, kabumB, americanasA] = mapDatabaseProducts({
+    offers: [offer('kabum', 'a'), offer('kabum', 'b'), offer('americanas', 'a')],
+    history: [
+      point('kabum', 'a', '10', '2026-11-18T10:00'),
+      point('kabum', 'b', '20', '2026-11-18T10:00'),
+      point('americanas', 'a', '30', '2026-11-18T10:00'),
+      point('kabum', 'a', '9', '2026-11-18T11:00'),
+    ],
+  });
+  assert.deepEqual(kabumA.history.map((p) => p.price), [10, 9]);
+  assert.deepEqual(kabumB.history.map((p) => p.price), [20]);
+  // Mesmo id em outra loja é outro produto.
+  assert.deepEqual(americanasA.history.map((p) => p.price), [30]);
+});
+
+test('produto sem histórico recebe lista vazia', () => {
+  const [product] = mapDatabaseProducts({
+    offers: [{ loja: 'kabum', produto_id: 'novo', nome: 'Novo', url: 'https://www.kabum.com.br/produto/1/x',
+      preco_atual: '10', preco_referencia: '10', preco_final: '10', atualizada_em: '2026-11-18' }],
+    history: [],
+  });
+  assert.deepEqual(product.history, []);
+});
+
 test('web consulta dados gravados pelo coletor em banco descartável',
   { skip: !process.env.TEST_DATABASE_URL }, async () => {
     const python = process.env.SCRAPER_PYTHON || 'python3';
@@ -61,19 +90,23 @@ from application.portas import PrecoColetado
 from domain.preco import Preco
 from domain.cupom import Cupom
 class Coletor:
+    def __init__(self,valor): self.valor=valor
     def coletar(self):
-        return [PrecoColetado('999','kabum',Preco(Decimal('100')),'Descoberto na categoria','https://www.kabum.com.br/produto/999/exemplo',Cupom('CODIGO'))]
+        return [PrecoColetado('999','kabum',Preco(Decimal(self.valor)),'Descoberto na categoria','https://www.kabum.com.br/produto/999/exemplo',Cupom('CODIGO'))]
 with conectar(os.environ['DATABASE_URL']) as c:
     c.execute(Path('../../sql/schema.sql').read_text())
-    ProcessarColeta(Coletor(),OfertaRepositorioPostgres(c),PublicadorPostgres(c)).executar()
+    # Quatro coletas: o preço só muda uma vez.
+    for valor in ('100','100','90','90'):
+        ProcessarColeta(Coletor(valor),OfertaRepositorioPostgres(c),PublicadorPostgres(c)).executar()
 `);
       const products = await readPostgresProducts();
       assert.equal(products.length, 1);
       assert.equal(products[0].label, 'Descoberto na categoria');
-      assert.equal(products[0].price, 100);
+      assert.equal(products[0].price, 90);
       assert.equal(products[0].coupon, 'CODIGO');
       assert.equal(products[0].couponDiscount, null);
-      assert.equal(products[0].history.length, 1);
+      // Primeira coleta, a mudança para 90 e a coleta mais recente; a repetição de 100 sai.
+      assert.deepEqual(products[0].history.map((p) => p.price), [100, 90, 90]);
     } finally {
       if (original === undefined) delete process.env.DATABASE_URL;
       else process.env.DATABASE_URL = original;
