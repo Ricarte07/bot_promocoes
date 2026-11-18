@@ -43,7 +43,7 @@ credenciais. Todas as variáveis estão explicadas no [`.env.example`](../.env.e
 ## Banco oficial (Docker)
 
 1. No `.env`, defina `POSTGRES_PASSWORD` e use a mesma senha na `DATABASE_URL`
-   (`postgresql://promo:SENHA@localhost:5432/promo`).
+   (`postgresql://promo:SENHA@127.0.0.1:5432/promo`).
 2. Suba o banco (e o Redis, se for usar o Telegram):
 
    ```bash
@@ -59,6 +59,11 @@ credenciais. Todas as variáveis estão explicadas no [`.env.example`](../.env.e
    ```
 
 A porta fica presa em `127.0.0.1`: o banco não aparece na rede da empresa.
+
+Use `127.0.0.1`, e não `localhost`, nas URLs do banco e do Redis. No Windows,
+`localhost` tenta primeiro o endereço IPv6 `::1`, onde o Docker não escuta; a
+tentativa não é recusada, fica esperando, e cada conexão atrasa de 5 a 10 segundos
+(ou trava, quando não há timeout).
 
 **Recriar do zero** (apaga todos os dados e o histórico do banco oficial):
 
@@ -211,7 +216,7 @@ Docker, crie uma vez o banco base de testes:
 
 ```bash
 docker exec promo-postgres createdb -U promo bot_promocoes_test
-export TEST_DATABASE_URL='postgresql://promo:SENHA@localhost:5432/bot_promocoes_test?sslmode=disable'
+export TEST_DATABASE_URL='postgresql://promo:SENHA@127.0.0.1:5432/bot_promocoes_test?sslmode=disable'
 pytest -q
 ```
 
