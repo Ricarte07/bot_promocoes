@@ -21,7 +21,8 @@ const (
 //
 // Usa um consumer group para que o Redis guarde o que ainda não foi
 // confirmado: se o processo cair no meio, as mensagens pendentes são
-// reentregues na próxima partida, antes das novas.
+// reentregues na próxima partida, antes das novas. As que falharem com o
+// processo no ar (ex.: Telegram fora) são tentadas de novo a cada revisão.
 type Consumidor struct {
 	cliente  *redis.Client
 	log      *slog.Logger
@@ -30,13 +31,18 @@ type Consumidor struct {
 	nome     string
 	bloqueio time.Duration // quanto tempo cada leitura espera por mensagens novas
 	lote     int64
+	revisao  time.Duration // espera depois de uma falha antes de tentar as pendentes de novo
+	agora    func() time.Time
 }
+
+const RevisaoPadrao = time.Minute
 
 type Opcao func(*Consumidor)
 
 func ComStream(stream string) Opcao     { return func(c *Consumidor) { c.stream = stream } }
 func ComGrupo(grupo string) Opcao       { return func(c *Consumidor) { c.grupo = grupo } }
 func ComBloqueio(d time.Duration) Opcao { return func(c *Consumidor) { c.bloqueio = d } }
+func ComRevisao(d time.Duration) Opcao  { return func(c *Consumidor) { c.revisao = d } }
 
 func NovoConsumidor(cliente *redis.Client, log *slog.Logger, opcoes ...Opcao) *Consumidor {
 	c := &Consumidor{
@@ -47,6 +53,8 @@ func NovoConsumidor(cliente *redis.Client, log *slog.Logger, opcoes ...Opcao) *C
 		nome:     "notifier-1",
 		bloqueio: 5 * time.Second,
 		lote:     10,
+		revisao:  RevisaoPadrao,
+		agora:    time.Now,
 	}
 	for _, aplicar := range opcoes {
 		aplicar(c)
@@ -61,25 +69,34 @@ func (c *Consumidor) Executar(ctx context.Context, tratar application.Tratador) 
 	}
 	c.log.Info("consumindo promoções", "stream", c.stream, "grupo", c.grupo)
 
-	// "0" entrega o que ficou pendente para este consumidor numa execução
-	// anterior; depois ">" passa a entregar só mensagens novas.
-	proximoID := "0"
+	// Uma "passada" pelas pendentes lê a partir de um cursor que avança
+	// mensagem a mensagem: cada pendente é tentada uma vez por passada, e as
+	// que falharem de novo esperam a próxima revisão. Sem o cursor, ler sempre
+	// a partir de "0" devolveria as mesmas pendentes para sempre enquanto o
+	// Telegram estivesse fora, e as mensagens novas nunca seriam lidas.
+	// A primeira passada acontece na partida, para o que sobrou da execução anterior.
+	lendoPendentes, cursor := true, "0"
+	var proximaRevisao time.Time // zero: não há falha esperando nova tentativa
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 
+		id := ">" // só mensagens novas
+		if lendoPendentes {
+			id = cursor
+		}
 		resultado, err := c.cliente.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Group:    c.grupo,
 			Consumer: c.nome,
-			Streams:  []string{c.stream, proximoID},
+			Streams:  []string{c.stream, id},
 			Count:    c.lote,
 			Block:    c.bloqueio,
 		}).Result()
 
 		switch {
 		case errors.Is(err, redis.Nil):
-			continue // tempo de bloqueio esgotou sem mensagem nova
+			resultado = nil // tempo de bloqueio esgotou sem mensagem nova
 		case err != nil:
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -95,32 +112,45 @@ func (c *Consumidor) Executar(ctx context.Context, tratar application.Tratador) 
 		for _, stream := range resultado {
 			for _, mensagem := range stream.Messages {
 				recebidas++
-				c.processar(ctx, mensagem, tratar)
+				if lendoPendentes {
+					cursor = mensagem.ID
+				}
+				if !c.processar(ctx, mensagem, tratar) && proximaRevisao.IsZero() {
+					proximaRevisao = c.agora().Add(c.revisao)
+				}
 			}
 		}
-		if proximoID == "0" && recebidas == 0 {
-			proximoID = ">" // pendências esgotadas
+
+		if lendoPendentes && recebidas == 0 {
+			lendoPendentes, cursor = false, "0" // passada terminada
+		}
+		if !lendoPendentes && !proximaRevisao.IsZero() && !c.agora().Before(proximaRevisao) {
+			c.log.Info("tentando de novo as promoções que falharam")
+			lendoPendentes, proximaRevisao = true, time.Time{}
 		}
 	}
 }
 
-func (c *Consumidor) processar(ctx context.Context, mensagem redis.XMessage, tratar application.Tratador) {
+// processar devolve true quando a mensagem foi confirmada (enviada ou
+// descartada) e false quando ficou pendente para nova tentativa.
+func (c *Consumidor) processar(ctx context.Context, mensagem redis.XMessage, tratar application.Tratador) bool {
 	promocao, err := DecodificarEvento(mensagem.Values)
 	if err != nil {
 		// Mensagem fora do contrato nunca vai ficar certa: confirma e segue.
 		c.log.Warn("mensagem descartada", "id", mensagem.ID, "erro", err)
 		c.confirmar(ctx, mensagem.ID)
-		return
+		return true
 	}
 
 	if err := tratar(ctx, promocao); err != nil {
-		// Sem ACK: fica pendente e volta na próxima partida do notifier.
+		// Sem ACK: fica pendente e volta na próxima revisão (ou partida).
 		c.log.Error("promoção não notificada", "id", mensagem.ID, "erro", err)
-		return
+		return false
 	}
 
 	c.log.Info("promoção notificada", "id", mensagem.ID, "loja", promocao.Loja, "produto", promocao.ProdutoID)
 	c.confirmar(ctx, mensagem.ID)
+	return true
 }
 
 func (c *Consumidor) confirmar(ctx context.Context, id string) {

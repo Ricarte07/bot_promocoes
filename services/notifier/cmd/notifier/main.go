@@ -82,7 +82,12 @@ func main() {
 	}
 	defer cliente.Close()
 
-	casoDeUso := application.NovoNotificarPromocao(notificador)
+	// Decorator: o cliente do Telegram fica igual; por fora, a mesma promoção
+	// (loja, produto, preço final e cupom) não sai duas vezes em 7 dias.
+	semRepeticao := application.NovoNotificadorIdempotente(
+		notificador, queue.NovoRegistroRedis(cliente), application.ValidadePadraoIdempotencia, log,
+	)
+	casoDeUso := application.NovoNotificarPromocao(semRepeticao)
 	fonte := queue.NovoConsumidor(cliente, log)
 
 	err = fonte.Executar(ctx, casoDeUso.Executar)

@@ -201,9 +201,94 @@ func TestPendentesSaoReentreguesNaProximaPartida(t *testing.T) {
 	}
 }
 
+func TestPendenteEReenviadaSemReiniciar(t *testing.T) {
+	a := montar(t)
+	a.consumidor.revisao = 100 * time.Millisecond
+	a.publicar(t, map[string]any{"json": eventoExemplo})
+
+	tentativas := 0
+	recebidas := a.executar(t, func(domain.Promocao) error {
+		tentativas++
+		if tentativas == 1 {
+			return errors.New("telegram fora do ar")
+		}
+		return nil
+	})
+
+	if len(recebidas) != 2 {
+		t.Fatalf("esperava a tentativa e a reenvio no mesmo processo, veio %d entrega(s)", len(recebidas))
+	}
+	if n := a.pendentes(t); n != 0 {
+		t.Errorf("depois do reenvio não deveria haver pendente, há %d", n)
+	}
+}
+
+func TestPendenteQueContinuaFalhandoNaoViraLaco(t *testing.T) {
+	a := montar(t)
+	a.publicar(t, map[string]any{"json": eventoExemplo})
+	a.executar(t, func(domain.Promocao) error { return errors.New("falhou") })
+
+	// Nova partida com o Telegram ainda fora: a pendente é tentada uma vez e
+	// espera a próxima revisão, em vez de ser relida sem parar.
+	recebidas := a.executar(t, func(domain.Promocao) error { return errors.New("ainda fora") })
+
+	if len(recebidas) != 1 {
+		t.Fatalf("a pendente deveria ser tentada 1 vez até a próxima revisão, foi %d", len(recebidas))
+	}
+}
+
+func TestPendenteQueFalhaNaoImpedeAsNovas(t *testing.T) {
+	a := montar(t)
+	a.publicar(t, map[string]any{"json": eventoExemplo})
+	a.executar(t, func(domain.Promocao) error { return errors.New("falhou") })
+
+	nova := strings.Replace(eventoExemplo, `"produto_id": "725571"`, `"produto_id": "999"`, 1)
+	a.publicar(t, map[string]any{"json": nova})
+	recebidas := a.executar(t, func(p domain.Promocao) error {
+		if p.ProdutoID == "725571" {
+			return errors.New("essa continua falhando")
+		}
+		return nil
+	})
+
+	ids := []string{}
+	for _, p := range recebidas {
+		ids = append(ids, p.ProdutoID)
+	}
+	if strings.Join(ids, ",") != "725571,999" {
+		t.Fatalf("esperava a pendente uma vez e depois a nova, veio %v", ids)
+	}
+}
+
 func TestRodarDeNovoComGrupoJaCriadoNaoEErro(t *testing.T) {
 	a := montar(t)
 	if err := a.consumidor.garantirGrupo(context.Background()); err != nil {
 		t.Fatalf("segunda criação do grupo falhou: %v", err)
+	}
+}
+
+// --- RegistroRedis -------------------------------------------------------------
+
+func TestRegistroLembraOEnvioAteVencer(t *testing.T) {
+	a := montar(t)
+	registro := NovoRegistroRedis(a.cliente)
+	ctx := context.Background()
+
+	if enviado, _ := registro.JaEnviado(ctx, "kabum:1:90.00:"); enviado {
+		t.Fatal("nada foi enviado ainda")
+	}
+	if err := registro.MarcarEnviado(ctx, "kabum:1:90.00:", 7*24*time.Hour); err != nil {
+		t.Fatalf("marcar: %v", err)
+	}
+	if enviado, _ := registro.JaEnviado(ctx, "kabum:1:90.00:"); !enviado {
+		t.Fatal("depois de marcar deveria constar como enviado")
+	}
+	if ttl := a.redis.TTL(PrefixoEnviados + "kabum:1:90.00:"); ttl != 7*24*time.Hour {
+		t.Errorf("a chave deveria valer 7 dias, vale %v", ttl)
+	}
+
+	a.redis.FastForward(7*24*time.Hour + time.Second)
+	if enviado, _ := registro.JaEnviado(ctx, "kabum:1:90.00:"); enviado {
+		t.Error("depois de 7 dias a promoção pode ser anunciada de novo")
 	}
 }

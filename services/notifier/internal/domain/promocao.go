@@ -7,6 +7,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -52,6 +53,14 @@ func (p Promocao) Validar() error {
 		return errors.Join(ErrPromocaoInvalida, errors.New("preco_referencia vazio"))
 	}
 	return nil
+}
+
+// ChaveIdempotencia identifica "a mesma promoção": mesmo produto, na mesma
+// loja, pelo mesmo preço final e com o mesmo cupom. Dois eventos com a mesma
+// chave geram uma mensagem só; se o preço cair ou o cupom mudar, a chave muda
+// e a promoção é anunciada de novo.
+func (p Promocao) ChaveIdempotencia() string {
+	return strings.Join([]string{p.Loja, p.ProdutoID, p.PrecoFinal, p.Cupom.Codigo}, ":")
 }
 
 // Titulo é o nome do produto ou, na falta dele, o id na loja.
