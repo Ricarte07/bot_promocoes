@@ -14,7 +14,7 @@ SELECT loja,produto_id,preco,coletado_em FROM (
     
   FROM public.historico_precos
   WINDOW w AS (PARTITION BY loja,produto_id ORDER BY coletado_em,id)
-)  
+) h
 WHERE anterior IS DISTINCT FROM preco OR seguinte IS NULL
 ORDER BY coletado_em,id
 '''
