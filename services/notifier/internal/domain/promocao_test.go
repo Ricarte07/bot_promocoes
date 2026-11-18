@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
 func valida() Promocao {
@@ -60,5 +61,32 @@ func TestCupom(t *testing.T) {
 	c.DescontoPercentual = "5.00"
 	if !c.ValorConhecido() {
 		t.Error("cupom com percentual tem valor conhecido")
+	}
+}
+
+func TestChaveIdempotencia(t *testing.T) {
+	base := valida()
+	base.PrecoFinal = "90.00"
+	base.Cupom = Cupom{Codigo: "DEZ"}
+
+	mesma := base
+	mesma.Nome, mesma.OcorridoEm = "outro nome", base.OcorridoEm.Add(time.Hour)
+	if mesma.ChaveIdempotencia() != base.ChaveIdempotencia() {
+		t.Error("nome e horário não mudam a promoção: a chave deveria ser igual")
+	}
+
+	mudancas := map[string]func(*Promocao){
+		"preço final": func(p *Promocao) { p.PrecoFinal = "85.00" },
+		"cupom":       func(p *Promocao) { p.Cupom.Codigo = "OUTRO" },
+		"sem cupom":   func(p *Promocao) { p.Cupom = Cupom{} },
+		"loja":        func(p *Promocao) { p.Loja = "americanas" },
+		"produto":     func(p *Promocao) { p.ProdutoID = "2" },
+	}
+	for nome, mudar := range mudancas {
+		outra := base
+		mudar(&outra)
+		if outra.ChaveIdempotencia() == base.ChaveIdempotencia() {
+			t.Errorf("mudar %s deveria gerar outra chave", nome)
+		}
 	}
 }

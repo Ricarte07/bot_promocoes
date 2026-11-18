@@ -43,7 +43,13 @@ O Redis vem do `docker-compose.yml` na raiz: `docker compose up -d`.
 ## Comportamento em falhas
 
 - Mensagem fora do contrato é descartada com aviso no log, para não travar as seguintes.
-- Se o Telegram falhar, a mensagem fica pendente no Redis e é reentregue na
-  próxima vez que o notifier subir.
+- Se o Telegram falhar, a mensagem fica pendente no Redis e é tentada de novo
+  depois de 1 minuto, sem precisar reiniciar o notifier. Na partida, o que ficou
+  pendente da execução anterior é tentado antes das novas; uma pendente que
+  continua falhando não trava a leitura das seguintes.
+- A mesma promoção (loja, produto, preço final e cupom) não é enviada duas vezes
+  em 7 dias, mesmo que o evento chegue repetido. Isso fica num Decorator
+  (`application.NotificadorIdempotente`) em volta do cliente do Telegram, com as
+  chaves `enviado:*` no Redis. Se o preço cair ou o cupom mudar, é outra promoção.
 - O consumer group é criado a partir das mensagens novas: promoções publicadas
   antes do primeiro `go run` não são enviadas.
