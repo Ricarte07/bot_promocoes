@@ -81,7 +81,7 @@ def test_reinicio_historico_cupons_sem_repetir_promocao(banco):
         assert c.execute('SELECT count(*) AS n FROM public.historico_precos').fetchone()['n'] == 3
         rows = c.execute('SELECT payload FROM public.eventos_pendentes').fetchall()
         assert len(rows) == 1
-        assert rows[0]['payload']['versao'] == 2
+        assert rows[0]['payload']['versao'] == 3
         assert rows[0]['payload']['preco_final'] == '72.00'
         # Cupom sem condição de desconto permanece desconhecido; cupom ausente é removido.
         assert coletar(c, [item('70', Cupom('CODIGO'))]) == 1
@@ -161,3 +161,27 @@ def test_rls_e_permissoes_publicas(banco):
                         c.execute('SELECT * FROM public.ofertas')
         finally:
             c.execute('DROP ROLE visitante_bot_sem_acesso')
+
+
+def test_de_inflado_e_conferido_pelo_historico_do_banco(banco):
+    """Caso da RTX 5060 de 18/11: o bot já viu R$ 3.199,99; "de R$ 6.678 por R$ 4.500" não passa."""
+    with conectar(banco) as c:
+        coletar(c, [item('3670.64', produto_id='rtx')])
+        coletar(c, [item('3199.99', produto_id='rtx')])
+        # As duas coletas vão 10 dias para o passado: o bot "acompanha" o produto há 10 dias.
+        c.execute("UPDATE public.historico_precos SET coletado_em = coletado_em - interval '10 days'")
+
+        assert coletar(c, [item('4500.00', preco_de='6678.23', produto_id='rtx')]) == 0
+        assert coletar(c, [item('3100.00', preco_de='6678.23', produto_id='rtx')]) == 1
+
+        payload = c.execute('SELECT payload FROM public.eventos_pendentes').fetchone()['payload']
+        assert payload['versao'] == 3
+        assert payload['base_desconto'] == 'menor_30_dias'
+        assert payload['preco_referencia'] == '6678.23'
+
+
+def test_produto_recem_descoberto_tem_de_marcado_como_da_loja(banco):
+    with conectar(banco) as c:
+        assert coletar(c, [item('1000', preco_de='1250', produto_id='novo')]) == 1
+        payload = c.execute('SELECT payload FROM public.eventos_pendentes').fetchone()['payload']
+        assert payload['base_desconto'] == 'preco_de_loja'

@@ -336,3 +336,26 @@ func TestContextoCanceladoContinuaReconhecivelSemExporOToken(t *testing.T) {
 		t.Fatalf("o erro expõe o token: %v", err)
 	}
 }
+
+func TestMensagemMostraDeOndeVemODesconto(t *testing.T) {
+	casos := map[string]string{
+		domain.BaseReferencia:  "📉 Queda acompanhada pelo bot",
+		domain.BaseMenor30Dias: "📉 Menor preço dos últimos 30 dias",
+		domain.BasePrecoDeLoja: "🏷️ Desconto sobre o preço \"de\" informado pela loja",
+	}
+	for base, linha := range casos {
+		p := promocaoExemplo()
+		p.BaseDesconto = base
+		obtido := FormatarMensagem(p)
+		if !strings.Contains(obtido, "(29,59% de desconto)\n"+linha+"\n") {
+			t.Errorf("%s: a linha de origem deveria vir logo após o preço:\n%s", base, obtido)
+		}
+	}
+}
+
+func TestEventoSemOrigemNaoGanhaLinhaDeOrigem(t *testing.T) {
+	obtido := FormatarMensagem(promocaoExemplo())
+	if strings.Contains(obtido, "📉") || strings.Contains(obtido, "🏷️") {
+		t.Errorf("sem base_desconto não deveria haver linha de origem: %q", obtido)
+	}
+}

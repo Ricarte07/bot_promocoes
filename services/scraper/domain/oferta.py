@@ -1,9 +1,17 @@
-from decimal import Decimal
 from typing import Optional
 
 from domain.cupom import Cupom
 from domain.eventos import PromocaoDetectada
 from domain.preco import Preco
+from domain.regras_promocao import (
+    TIPO_PRECO_DE,
+    TIPO_REFERENCIA,
+    Candidato,
+    Contexto,
+    HistoricoRecente,
+    Regra,
+    cadeia_padrao,
+)
 
 
 class Oferta:
@@ -18,13 +26,14 @@ class Oferta:
     - preco_final: o que o comprador paga, com o cupom aplicado quando a loja
       diz quanto ele desconta.
 
-    É promoção quando o preco_final está pelo menos DESCONTO_MINIMO abaixo de
-    uma das duas bases, referência ou "de". O evento sai quando a oferta entra
-    em promoção ou quando, já em promoção, o preço final cai mais um pouco.
-    Enquanto nada muda, não se repete.
+    Se é promoção, quem decide é a cadeia de regras (domain/regras_promocao.py):
+    desconto mínimo de 15% e, para o preço "de", a conferência com o menor
+    preço dos últimos 30 dias. O evento sai quando a oferta entra em promoção
+    ou quando, já em promoção, o preço final cai mais um pouco. Enquanto nada
+    muda, não se repete.
     """
 
-    DESCONTO_MINIMO = Decimal("15")
+    REGRAS: Regra = cadeia_padrao()
 
     def __init__(
         self,
@@ -51,7 +60,10 @@ class Oferta:
         novo_preco: Preco,
         cupom: Optional[Cupom] = None,
         preco_de: Optional[Preco] = None,
+        historico: Optional[HistoricoRecente] = None,
     ) -> None:
+        """historico: o que o bot já viu antes desta coleta. Sem ele, o produto
+        é tratado como recém-descoberto (o "de" da loja não pode ser conferido)."""
         final_anterior = self.preco_final
         estava_em_promocao = self.em_promocao
 
@@ -60,21 +72,22 @@ class Oferta:
         self.preco_de = preco_de
         self.preco_final = self._com_cupom(novo_preco, cupom)
 
-        base, desconto = self._melhor_desconto()
-        self.em_promocao = desconto >= self.DESCONTO_MINIMO
+        promocao = self._melhor_promocao(historico or HistoricoRecente())
+        self.em_promocao = promocao is not None
         caiu = self.preco_final.valor < final_anterior.valor
 
-        if self.em_promocao and (not estava_em_promocao or caiu):
+        if promocao is not None and (not estava_em_promocao or caiu):
             self._eventos.append(
                 PromocaoDetectada(
                     produto_id=self.produto_id,
                     loja=self.loja,
                     preco_atual=novo_preco.valor,
-                    preco_referencia=base.valor,
-                    desconto_percentual=desconto,
+                    preco_referencia=promocao.base.valor,
+                    desconto_percentual=promocao.desconto,
                     nome=self.nome,
                     url=self.url,
                     cupom=cupom,
+                    base_desconto=promocao.origem or "",
                 )
             )
 
@@ -82,19 +95,21 @@ class Oferta:
         eventos, self._eventos = self._eventos, []
         return eventos
 
-    def _melhor_desconto(self) -> tuple[Preco, Decimal]:
-        """Compara o preço final com cada base e devolve a que dá o maior desconto.
+    def _melhor_promocao(self, historico: HistoricoRecente) -> Optional[Candidato]:
+        """Passa cada base pela cadeia de regras e fica com o maior desconto aprovado.
 
-        Em empate fica a referência, que é a base mais confiável: o preço "de"
-        é a loja quem diz, e às vezes ele vem inflado.
+        Em empate fica a referência, que vem primeiro: é a base mais confiável,
+        porque o preço "de" é a loja quem diz, e às vezes ele vem inflado.
         """
-        bases = [self.preco_referencia]
+        candidatos = [Candidato(self.preco_referencia, TIPO_REFERENCIA,
+                                self.preco_final.desconto_percentual(self.preco_referencia))]
         if self.preco_de is not None:
-            bases.append(self.preco_de)
-        return max(
-            ((base, self.preco_final.desconto_percentual(base)) for base in bases),
-            key=lambda par: par[1],
-        )
+            candidatos.append(Candidato(self.preco_de, TIPO_PRECO_DE,
+                                        self.preco_final.desconto_percentual(self.preco_de)))
+
+        contexto = Contexto(self.preco_final, historico)
+        aprovados = [c for c in (self.REGRAS.avaliar(c, contexto) for c in candidatos) if c]
+        return max(aprovados, key=lambda c: c.desconto, default=None)
 
     @staticmethod
     def _com_cupom(preco: Preco, cupom: Optional[Cupom]) -> Preco:
