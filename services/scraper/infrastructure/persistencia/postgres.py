@@ -10,6 +10,7 @@ from application.portas import FonteDeProdutosMonitorados, ProdutoMonitorado
 from domain.cupom import Cupom
 from domain.oferta import Oferta
 from domain.preco import Preco
+from domain.regras_promocao import HistoricoRecente
 from domain.repositorios import OfertaRepositorio
 
 
@@ -93,6 +94,24 @@ class OfertaRepositorioPostgres(OfertaRepositorio):
                 (oferta.loja, oferta.produto_id, oferta.preco_atual.valor, preco_de,
                  oferta.preco_final.valor, codigo, percentual),
             )
+
+
+    def historico_recente(self, produto_id: str, loja: str) -> HistoricoRecente:
+        # Usa o índice (loja, produto_id, coletado_em). Roda dentro da transação
+        # do produto, antes de salvar: a coleta atual ainda não está no histórico.
+        row = self.conexao.execute(
+            """SELECT min(preco_final) FILTER (
+                          WHERE coletado_em >= clock_timestamp() - interval '30 days') AS menor,
+                      extract(epoch FROM clock_timestamp() - min(coletado_em)) / 86400 AS dias
+               FROM public.historico_precos WHERE loja=%s AND produto_id=%s""",
+            (loja, produto_id),
+        ).fetchone()
+        if row is None or row['dias'] is None:
+            return HistoricoRecente()
+        return HistoricoRecente(
+            menor_preco_30_dias=Preco(row['menor']) if row['menor'] is not None else None,
+            dias_acompanhado=float(row['dias']),
+        )
 
 
 class FonteDeProdutosPostgres(FonteDeProdutosMonitorados):

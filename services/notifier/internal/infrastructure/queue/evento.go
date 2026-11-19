@@ -12,7 +12,7 @@ import (
 
 const (
 	TipoEvento   = "promocao_detectada"
-	VersaoEvento = 2
+	VersaoEvento = 3 // versão atual; a 2 continua aceita (sem base_desconto)
 	CampoJSON    = "json"
 )
 
@@ -28,7 +28,8 @@ type eventoPromocao struct {
 	PrecoFinal         string       `json:"preco_final"`
 	PrecoReferencia    string       `json:"preco_referencia"`
 	DescontoPercentual string       `json:"desconto_percentual"`
-	Cupom              *eventoCupom `json:"cupom"` // null quando não há cupom
+	Cupom              *eventoCupom `json:"cupom"`         // null quando não há cupom
+	BaseDesconto       string       `json:"base_desconto"` // v3; null ou ausente vira ""
 	OcorridoEm         string       `json:"ocorrido_em"`
 }
 
@@ -52,8 +53,8 @@ func DecodificarEvento(campos map[string]any) (domain.Promocao, error) {
 	if evento.Tipo != TipoEvento {
 		return domain.Promocao{}, fmt.Errorf("tipo %q, esperava %q", evento.Tipo, TipoEvento)
 	}
-	if evento.Versao != VersaoEvento {
-		return domain.Promocao{}, fmt.Errorf("versão %d, esperava %d", evento.Versao, VersaoEvento)
+	if evento.Versao != VersaoEvento && evento.Versao != 2 {
+		return domain.Promocao{}, fmt.Errorf("versão %d, esperava 2 ou %d", evento.Versao, VersaoEvento)
 	}
 
 	ocorridoEm, err := time.Parse(time.RFC3339Nano, evento.OcorridoEm)
@@ -70,6 +71,7 @@ func DecodificarEvento(campos map[string]any) (domain.Promocao, error) {
 		PrecoFinal:         evento.PrecoFinal,
 		PrecoReferencia:    evento.PrecoReferencia,
 		DescontoPercentual: evento.DescontoPercentual,
+		BaseDesconto:       evento.BaseDesconto,
 		OcorridoEm:         ocorridoEm,
 	}
 	if evento.Cupom != nil {

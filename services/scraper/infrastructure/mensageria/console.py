@@ -16,8 +16,17 @@ class PublicadorNoConsole(PublicadorDeEventos):
     def publicar(self, evento: PromocaoDetectada) -> None:
         descricao = evento.nome or f"produto {evento.produto_id}"
         cupom = f" com o cupom {evento.cupom.codigo}" if evento.cupom else ""
+        origem = ORIGENS.get(evento.base_desconto)
+        origem = f" [{origem}]" if origem else ""
         self._escrever(
             f"[PROMOÇÃO] {evento.loja} | {descricao} | "
             f"de R$ {evento.preco_referencia} por R$ {evento.preco_final}{cupom} "
-            f"({evento.desconto_percentual}% de desconto) {evento.url}".rstrip()
+            f"({evento.desconto_percentual}% de desconto){origem} {evento.url}".rstrip()
         )
+
+
+ORIGENS = {
+    "referencia": "queda vista pelo bot",
+    "menor_30_dias": "menor preço em 30 dias",
+    "preco_de_loja": "desconto informado pela loja",
+}

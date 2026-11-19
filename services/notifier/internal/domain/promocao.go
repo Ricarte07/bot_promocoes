@@ -33,8 +33,16 @@ type Promocao struct {
 	PrecoReferencia    string // base do desconto: "de" da loja ou primeiro preço visto
 	DescontoPercentual string // ex.: "29.59"
 	Cupom              Cupom
+	BaseDesconto       string // de onde vem o desconto (ver as constantes Base*); vazio = não informado
 	OcorridoEm         time.Time
 }
+
+// Origens do desconto, como vêm no campo base_desconto do contrato v3.
+const (
+	BaseReferencia  = "referencia"    // o próprio bot viu o preço cair
+	BaseMenor30Dias = "menor_30_dias" // "de" da loja confirmado pelo histórico do bot
+	BasePrecoDeLoja = "preco_de_loja" // "de" da loja, ainda sem histórico para conferir
+)
 
 var ErrPromocaoInvalida = errors.New("promoção inválida")
 

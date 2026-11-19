@@ -17,6 +17,7 @@ def evento_exemplo(cupom=Cupom("ESQUENTA", Decimal("5"))):
         nome="Fonte Gamer Rise Mode Elektra, 650W, Bronze, Full Modular",
         url="https://www.kabum.com.br/produto/725571/fonte-gamer-rise-mode-elektra-650w",
         cupom=cupom,
+        base_desconto="menor_30_dias",
         ocorrido_em=datetime(2026, 10, 30, 17, 54, 35, 380000, tzinfo=timezone.utc),
     )
 
@@ -26,7 +27,7 @@ def test_json_segue_o_contrato_documentado():
 
     assert json.loads(texto) == {
         "tipo": "promocao_detectada",
-        "versao": 2,
+        "versao": 3,
         "produto_id": "725571",
         "loja": "kabum",
         "nome": "Fonte Gamer Rise Mode Elektra, 650W, Bronze, Full Modular",
@@ -36,6 +37,7 @@ def test_json_segue_o_contrato_documentado():
         "preco_referencia": "377.77",
         "desconto_percentual": "29.59",
         "cupom": {"codigo": "ESQUENTA", "desconto_percentual": "5.00"},
+        "base_desconto": "menor_30_dias",
         "ocorrido_em": "2026-10-30T17:54:35.380000+00:00",
     }
 
@@ -73,3 +75,15 @@ def test_acentos_saem_legiveis_e_nao_escapados():
     )
 
     assert '"nome": "Placa de Vídeo"' in serializar_evento(evento)
+
+
+def test_evento_sem_origem_conhecida_manda_base_desconto_nula():
+    evento = PromocaoDetectada(
+        produto_id="1",
+        loja="kabum",
+        preco_atual=Decimal("800"),
+        preco_referencia=Decimal("1000"),
+        desconto_percentual=Decimal("20.00"),
+    )
+
+    assert json.loads(serializar_evento(evento))["base_desconto"] is None

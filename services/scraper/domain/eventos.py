@@ -16,6 +16,9 @@ class PromocaoDetectada:
     nome: str = ""
     url: str = ""
     cupom: Optional[Cupom] = None
+    # De onde vem o desconto: "referencia", "menor_30_dias" ou "preco_de_loja"
+    # (ver domain/regras_promocao.py). Vazio em eventos montados fora da Oferta.
+    base_desconto: str = ""
     ocorrido_em: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     @property

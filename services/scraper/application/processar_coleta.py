@@ -32,7 +32,11 @@ class ProcessarColeta:
                     )
                 oferta.nome = item.nome or oferta.nome
                 oferta.url = item.url or oferta.url
-                oferta.registrar_preco(item.preco, cupom=item.cupom, preco_de=item.preco_de)
+                # Lido antes de salvar: o histórico não inclui esta coleta.
+                historico = self.repositorio.historico_recente(item.produto_id, item.loja)
+                oferta.registrar_preco(
+                    item.preco, cupom=item.cupom, preco_de=item.preco_de, historico=historico
+                )
 
                 self.repositorio.salvar(oferta)
 

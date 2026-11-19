@@ -292,3 +292,42 @@ func TestRegistroLembraOEnvioAteVencer(t *testing.T) {
 		t.Error("depois de 7 dias a promoção pode ser anunciada de novo")
 	}
 }
+
+// --- Contrato v3: base_desconto ------------------------------------------------
+
+func TestVersao3TrazAOrigemDoDesconto(t *testing.T) {
+	v3 := strings.Replace(eventoExemplo, `"versao": 2`, `"versao": 3`, 1)
+	v3 = strings.Replace(v3, `"ocorrido_em"`, `"base_desconto": "menor_30_dias", "ocorrido_em"`, 1)
+
+	promocao, err := DecodificarEvento(map[string]any{"json": v3})
+
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if promocao.BaseDesconto != domain.BaseMenor30Dias {
+		t.Errorf("base_desconto = %q, esperava %q", promocao.BaseDesconto, domain.BaseMenor30Dias)
+	}
+}
+
+func TestVersao3ComOrigemNulaEVersao2ContinuamAceitas(t *testing.T) {
+	v3nula := strings.Replace(eventoExemplo, `"versao": 2`, `"versao": 3`, 1)
+	v3nula = strings.Replace(v3nula, `"ocorrido_em"`, `"base_desconto": null, "ocorrido_em"`, 1)
+
+	for nome, bruto := range map[string]string{"v2": eventoExemplo, "v3 com null": v3nula} {
+		promocao, err := DecodificarEvento(map[string]any{"json": bruto})
+		if err != nil {
+			t.Errorf("%s deveria ser aceito: %v", nome, err)
+			continue
+		}
+		if promocao.BaseDesconto != "" {
+			t.Errorf("%s: sem origem informada, base_desconto deveria vir vazio, veio %q", nome, promocao.BaseDesconto)
+		}
+	}
+}
+
+func TestVersaoDesconhecidaEDescartada(t *testing.T) {
+	v4 := strings.Replace(eventoExemplo, `"versao": 2`, `"versao": 4`, 1)
+	if _, err := DecodificarEvento(map[string]any{"json": v4}); err == nil {
+		t.Error("versão 4 não existe e deveria ser recusada")
+	}
+}

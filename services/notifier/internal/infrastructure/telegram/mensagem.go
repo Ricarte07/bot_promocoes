@@ -32,6 +32,10 @@ func FormatarMensagem(p domain.Promocao) string {
 		formatarReal(p.PrecoFinal),
 		virgulaDecimal(p.DescontoPercentual),
 	)
+	if origem := linhaOrigem(p.BaseDesconto); origem != "" {
+		b.WriteString("\n")
+		b.WriteString(origem)
+	}
 	if p.Cupom.Existe() {
 		b.WriteString("\n")
 		b.WriteString(linhaCupom(p.Cupom))
@@ -41,6 +45,20 @@ func FormatarMensagem(p domain.Promocao) string {
 	}
 
 	return b.String()
+}
+
+// linhaOrigem diz a quem lê o quanto confiar no desconto. Vazio para eventos
+// antigos (contrato v2) ou origem desconhecida: a linha não aparece.
+func linhaOrigem(base string) string {
+	switch base {
+	case domain.BaseReferencia:
+		return "📉 Queda acompanhada pelo bot"
+	case domain.BaseMenor30Dias:
+		return "📉 Menor preço dos últimos 30 dias"
+	case domain.BasePrecoDeLoja:
+		return "🏷️ Desconto sobre o preço \"de\" informado pela loja"
+	}
+	return ""
 }
 
 func linhaCupom(c domain.Cupom) string {
