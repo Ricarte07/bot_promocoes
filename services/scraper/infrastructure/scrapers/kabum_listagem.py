@@ -21,6 +21,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 
 import requests
 
+from application.conferencia import JaConfirmado, nada_confirmado
 from application.portas import ColetorDePrecos, PrecoColetado, ProdutoMonitorado
 from infrastructure.scrapers.base import PaginaInvalida, baixar_html, converter
 from infrastructure.scrapers.kabum import (
@@ -84,11 +85,15 @@ def _converter_item(item: dict) -> Optional[ItemListagem]:
     codigo = item.get("code")
     if codigo is None:
         return None
-    preco = item.get("priceWithDiscount")
-    if preco is None:
-        preco = item.get("price")
+    # Produto em campanha (ex.: "Esquenta Black"): os preços da campanha vêm no
+    # bloco "offer", e os de fora dele são os de sem campanha. A página do
+    # produto já mostra os da campanha; ler só os de fora fazia a listagem
+    # parecer desatualizada.
+    oferta = item.get("offer") if isinstance(item.get("offer"), dict) else {}
+    preco = _primeiro(oferta.get("priceWithDiscount"), item.get("priceWithDiscount"), item.get("price"))
     if preco is None:
         return None
+    preco_cartao = _primeiro(oferta.get("price"), item.get("price"))
 
     produto = ProdutoKabum(
         produto_id=str(codigo),
@@ -96,9 +101,14 @@ def _converter_item(item: dict) -> Optional[ItemListagem]:
         preco_avista=Decimal(str(preco)),
         disponivel=bool(item.get("available")),
         cupom=extrair_cupom(item.get("stamps")),
-        preco_de=ler_preco_de(item.get("oldPrice"), item.get("price")),
+        preco_de=ler_preco_de(item.get("oldPrice"), preco_cartao),
     )
     return ItemListagem(produto=produto, url=url_do_produto(codigo, item.get("friendlyName") or ""))
+
+
+def _primeiro(*valores):
+    """O primeiro valor informado (0 conta como informado; None não)."""
+    return next((valor for valor in valores if valor is not None), None)
 
 
 def url_do_produto(codigo, nome_amigavel: str) -> str:
@@ -115,7 +125,13 @@ def url_da_pagina(url_listagem: str, numero: int) -> str:
 
 
 class ColetorListagemKabum(ColetorDePrecos):
-    """Percorre listagens de categoria da Kabum e devolve todos os produtos disponíveis."""
+    """Percorre listagens de categoria da Kabum e devolve todos os produtos disponíveis.
+
+    A listagem não traz tudo (o percentual do cupom, por exemplo, só aparece
+    na página do produto), então cada produto é conferido na própria página,
+    a não ser que ja_confirmado devolva o registro anterior (por padrão, nunca
+    devolve). Na rodada do bot, só se confere o que mudou desde a última coleta.
+    """
 
     loja = LOJA
 
@@ -126,8 +142,10 @@ class ColetorListagemKabum(ColetorDePrecos):
         intervalo_segundos: float = 2.0,
         esperar: Callable[[float], None] = time.sleep,
         baixar_produto: Callable[[str], str] = baixar_html,
+        ja_confirmado: JaConfirmado = nada_confirmado,
     ):
         self.listagens = list(listagens)
+        self._ja_confirmado = ja_confirmado
         self._baixar = baixar
         self._baixar_produto = baixar_produto
         self._intervalo = intervalo_segundos
@@ -168,9 +186,17 @@ class ColetorListagemKabum(ColetorDePrecos):
 
     def _converter(self, listagem: ListagemKabum) -> list[PrecoColetado]:
         coletados = []
+        conferidos = sem_mudanca = 0
         for item in listagem.itens:
             if not item.produto.disponivel:
                 continue
+            da_listagem = converter(item.produto, item.url, self.loja, registrar_no_log=False)
+            confirmado = self._ja_confirmado(da_listagem) if da_listagem is not None else None
+            if confirmado is not None:
+                coletados.append(confirmado)
+                sem_mudanca += 1
+                continue
+            conferidos += 1
             if self._intervalo > 0:
                 self._esperar(self._intervalo)
             try:
@@ -183,4 +209,8 @@ class ColetorListagemKabum(ColetorDePrecos):
             coletado = converter(produto, item.url, self.loja)
             if coletado is not None:
                 coletados.append(coletado)
+        logger.info(
+            "%s: %d produto(s) conferido(s) na página, %d sem mudança desde a última coleta",
+            self.loja, conferidos, sem_mudanca,
+        )
         return coletados

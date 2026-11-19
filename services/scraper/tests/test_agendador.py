@@ -16,6 +16,7 @@ import argparse
 
 import pytest
 
+from application.conferencia import ReaproveitarSeNaoMudou
 from interfaces.agendador import (
     carregar_dotenv,
     executar_rodada,
@@ -48,9 +49,9 @@ class FonteFalsa(FonteDeProdutosMonitorados):
 
 def fabricas_com_preco(valor: str):
     return {
-        ("kabum", "produto"): lambda itens: ColetorFalso("kabum", itens, valor),
-        ("kabum", "listagem"): lambda itens: ColetorFalso("kabum-listagem", itens, valor),
-        ("outra", "produto"): lambda itens: ColetorFalso("outra", itens, valor),
+        ("kabum", "produto"): lambda itens, _: ColetorFalso("kabum", itens, valor),
+        ("kabum", "listagem"): lambda itens, _: ColetorFalso("kabum-listagem", itens, valor),
+        ("outra", "produto"): lambda itens, _: ColetorFalso("outra", itens, valor),
     }
 
 
@@ -102,6 +103,21 @@ def test_rodada_completa_publica_promocao_na_segunda_coleta():
     assert len(mensagens) == 1
     assert "kabum" in mensagens[0]
     assert "20.00%" in mensagens[0]
+
+
+def test_rodada_entrega_aos_coletores_o_reaproveitamento_do_que_nao_mudou():
+    fonte = FonteFalsa([ProdutoMonitorado("kabum", "cat1", tipo="listagem")])
+    recebidas = []
+
+    def fabrica(itens, ja_confirmado):
+        recebidas.append(ja_confirmado)
+        return ColetorFalso("kabum-listagem", itens, "100")
+
+    executar_rodada(fonte, OfertaRepositorioEmMemoria(), PublicadorNoConsole(escrever=lambda _: None),
+                    {("kabum", "listagem"): fabrica})
+
+    [ja_confirmado] = recebidas
+    assert isinstance(ja_confirmado, ReaproveitarSeNaoMudou)
 
 
 def test_mensagem_no_console_mostra_nome_e_link():

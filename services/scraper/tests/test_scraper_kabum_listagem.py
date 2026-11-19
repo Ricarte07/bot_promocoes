@@ -6,8 +6,9 @@ from pathlib import Path
 import pytest
 import requests
 
-from application.portas import ProdutoMonitorado
+from application.portas import PrecoColetado, ProdutoMonitorado
 from domain.cupom import Cupom
+from domain.preco import Preco
 from infrastructure.scrapers.base import PaginaInvalida
 from infrastructure.scrapers.kabum_listagem import (
     ColetorListagemKabum,
@@ -228,3 +229,70 @@ def test_falha_na_confirmacao_nao_grava_preco_da_categoria(caplog):
         baixar_produto=lambda _: "<html>sem produto</html>", intervalo_segundos=0)
     assert coletor.coletar() == []
     assert "não confirmei o preço" in caplog.text
+
+
+
+def test_produto_em_campanha_usa_os_precos_do_bloco_offer():
+    # Caso real (907814, "Esquenta Black das Blacks"): fora do offer ficam os preços
+    # sem campanha; a página do produto mostra os da campanha.
+    cru = item(907814, "2499.99")
+    cru.update(price=2941.16, oldPrice=2941.16,
+               offer={"name": "ESQUENTA BLACK DAS BLACKS", "price": 2352.93, "priceWithDiscount": 1999.99})
+
+    [lido] = extrair_listagem(pagina_de_listagem([cru])).itens
+
+    assert lido.produto.preco_avista == Decimal("1999.99")
+    assert lido.produto.preco_de == Decimal("2941.16")  # acima do cartão da campanha
+
+
+def coletor_que_reaproveita(html_listagem, reaproveitados: set[str], esperas=None):
+    produtos = {url_do_produto(cru["code"], cru["friendlyName"]): pagina_de_produto(cru)
+                for cru in itens_crus(html_listagem)}
+    baixar_produto = DownloadFalso(produtos)
+    coletor = ColetorListagemKabum(
+        [listagem()], baixar=lambda _: html_listagem, baixar_produto=baixar_produto,
+        intervalo_segundos=2.0, esperar=(esperas if esperas is not None else []).append,
+        ja_confirmado=lambda visto: visto if visto.produto_id in reaproveitados else None,
+    )
+    return coletor, baixar_produto
+
+
+def test_so_confere_na_pagina_o_produto_que_mudou():
+    html_listagem = pagina_de_listagem([item(1, "100"), item(2, "200"), item(3, "300")])
+    esperas: list[float] = []
+    coletor, baixar_produto = coletor_que_reaproveita(html_listagem, {"1", "3"}, esperas)
+
+    itens = coletor.coletar()
+
+    assert [(i.produto_id, i.preco.valor) for i in itens] == [
+        ("1", Decimal("100")), ("2", Decimal("200")), ("3", Decimal("300"))]
+    assert baixar_produto.urls_pedidas == [url_do_produto(2, "produto-2")]
+    assert esperas == [2.0]  # só a espera antes da única página conferida
+
+
+def test_produto_reaproveitado_vem_como_o_registro_confirmado():
+    html_listagem = pagina_de_listagem([item(1, "100")])
+    confirmado = PrecoColetado("1", "kabum", Preco(Decimal("100")), cupom=Cupom("DEZ", Decimal("10")))
+    vistos = []
+    coletor = ColetorListagemKabum([listagem()], baixar=lambda _: html_listagem,
+        baixar_produto=lambda _: pytest.fail("não devia abrir a página"), intervalo_segundos=0,
+        ja_confirmado=lambda visto: vistos.append(visto) or confirmado)
+
+    assert coletor.coletar() == [confirmado]
+    assert vistos[0].preco.valor == Decimal("100")  # recebe o que a listagem mostrou
+
+
+def test_produto_que_mudou_fica_com_o_preco_da_pagina():
+    html_listagem = pagina_de_listagem([item(996572, "2999.99")])
+    pagina = {"props": {"pageProps": {"product": {
+        "id": 996572, "title": "Husky", "available": True, "price": "2481.18",
+        "prices": {"price": "2481.18", "priceWithDiscount": "2109.00", "oldPrice": "0"},
+    }}}}
+    html_produto = f'<script id="__NEXT_DATA__" type="application/json">{json.dumps(pagina)}</script>'
+    coletor = ColetorListagemKabum([listagem()], baixar=lambda _: html_listagem,
+        baixar_produto=lambda _: html_produto, intervalo_segundos=0,
+        ja_confirmado=lambda _: None)
+
+    [coletado] = coletor.coletar()
+
+    assert coletado.preco.valor == Decimal("2109.00")
