@@ -20,6 +20,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from application.conferencia import JaConfirmado, ReaproveitarSeNaoMudou, nada_confirmado
 from application.portas import (
     TIPO_LISTAGEM,
     TIPO_PRODUTO,
@@ -49,12 +50,15 @@ ENV_PADRAO = Path(__file__).resolve().parent.parent.parent.parent / ".env"
 
 # Para adicionar uma loja: escreva o adaptador em infrastructure/scrapers e registre aqui,
 # pela chave (loja, tipo). Uma loja pode ter coletor de produto avulso, de listagem ou os dois.
-FabricaDeColetor = Callable[[list[ProdutoMonitorado]], ColetorDePrecos]
+# A fábrica recebe também o "já confirmado?" (application/conferencia.py), usado por
+# quem lê preços de uma listagem e confere produto a produto na página (hoje, a Kabum).
+FabricaDeColetor = Callable[[list[ProdutoMonitorado], JaConfirmado], ColetorDePrecos]
 FABRICAS_DE_COLETOR: dict[tuple[str, str], FabricaDeColetor] = {
-    (KABUM, TIPO_PRODUTO): lambda itens: ColetorKabum(urls=[item.url for item in itens]),
-    (KABUM, TIPO_LISTAGEM): lambda itens: ColetorListagemKabum(listagens=itens),
-    (AMERICANAS, TIPO_PRODUTO): lambda itens: ColetorAmericanas(urls=[item.url for item in itens]),
-    (AMERICANAS, TIPO_LISTAGEM): lambda itens: ColetorListagemAmericanas(listagens=itens),
+    (KABUM, TIPO_PRODUTO): lambda itens, _: ColetorKabum(urls=[item.url for item in itens]),
+    (KABUM, TIPO_LISTAGEM): lambda itens, ja_confirmado: ColetorListagemKabum(
+        listagens=itens, ja_confirmado=ja_confirmado),
+    (AMERICANAS, TIPO_PRODUTO): lambda itens, _: ColetorAmericanas(urls=[item.url for item in itens]),
+    (AMERICANAS, TIPO_LISTAGEM): lambda itens, _: ColetorListagemAmericanas(listagens=itens),
 }
 
 
@@ -74,6 +78,7 @@ class ColetorComposto(ColetorDePrecos):
 def montar_coletor(
     produtos: list[ProdutoMonitorado],
     fabricas: dict[tuple[str, str], FabricaDeColetor] = FABRICAS_DE_COLETOR,
+    ja_confirmado: JaConfirmado = nada_confirmado,
 ) -> ColetorComposto:
     """Agrupa os itens por (loja, tipo) e cria um coletor para cada grupo conhecido."""
     grupos: dict[tuple[str, str], list[ProdutoMonitorado]] = {}
@@ -88,7 +93,7 @@ def montar_coletor(
                 "Loja '%s' não tem scraper de %s; %d item(ns) ignorado(s)", loja, tipo, len(itens)
             )
             continue
-        coletores.append(fabrica(itens))
+        coletores.append(fabrica(itens, ja_confirmado))
 
     return ColetorComposto(coletores)
 
@@ -101,7 +106,7 @@ def executar_rodada(
 ) -> int:
     """Uma rodada completa: lê a lista, coleta, processa e devolve quantas promoções saíram."""
     produtos = fonte.listar()
-    coletor = montar_coletor(produtos, fabricas)
+    coletor = montar_coletor(produtos, fabricas, ReaproveitarSeNaoMudou(repositorio))
     caso_de_uso = ProcessarColeta(coletor, repositorio, publicador)
     return caso_de_uso.executar()
 

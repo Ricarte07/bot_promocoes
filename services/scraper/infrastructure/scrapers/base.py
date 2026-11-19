@@ -102,24 +102,29 @@ class ColetorPorUrls(ColetorDePrecos):
         return converter(produto, url, self.loja)
 
 
-def converter(produto: ProdutoExtraido, url: str, loja: str) -> Optional[PrecoColetado]:
+def converter(
+    produto: ProdutoExtraido, url: str, loja: str, registrar_no_log: bool = True
+) -> Optional[PrecoColetado]:
     """Transforma o produto cru em PrecoColetado; produto sem estoque vira None.
 
     Compartilhada entre os coletores de produto e de listagem, para que o log e
-    as regras de conversão sejam os mesmos.
+    as regras de conversão sejam os mesmos. registrar_no_log=False serve para
+    um preço provisório, que ainda pode ser trocado pelo da página do produto.
     """
     if not produto.disponivel:
-        logger.info("%s: produto %s sem estoque, ignorado", loja, produto.produto_id)
+        if registrar_no_log:
+            logger.info("%s: produto %s sem estoque, ignorado", loja, produto.produto_id)
         return None
 
-    logger.info(
-        "%s: produto %s a R$ %s (%s)%s",
-        loja,
-        produto.produto_id,
-        produto.preco_avista,
-        produto.nome[:50],
-        f" cupom {produto.cupom.codigo}" if produto.cupom else "",
-    )
+    if registrar_no_log:
+        logger.info(
+            "%s: produto %s a R$ %s (%s)%s",
+            loja,
+            produto.produto_id,
+            produto.preco_avista,
+            produto.nome[:50],
+            f" cupom {produto.cupom.codigo}" if produto.cupom else "",
+        )
     return PrecoColetado(
         produto_id=produto.produto_id,
         loja=loja,

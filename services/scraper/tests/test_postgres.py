@@ -116,7 +116,7 @@ def test_fonte_categoria_e_produtos_descobertos_individuais(banco):
         class Listagem:
             def coletar(self):
                 return [item(produto_id='1'), item(produto_id='2')]
-        fabricas = {('kabum', 'listagem'): lambda _: Listagem()}
+        fabricas = {('kabum', 'listagem'): lambda _, __: Listagem()}
         executar_rodada(fonte, OfertaRepositorioPostgres(c), PublicadorPostgres(c), fabricas)
         assert c.execute('SELECT count(*) AS n FROM public.ofertas').fetchone()['n'] == 2
         assert c.execute('SELECT count(*) AS n FROM public.historico_precos').fetchone()['n'] == 2
