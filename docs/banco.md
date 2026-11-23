@@ -177,6 +177,13 @@ Cada produto encontrado numa categoria vira uma linha de `ofertas` e novas linha
 histórico. Produtos coletados continuam no catálogo mesmo se a categoria for
 desativada; a data informa quando foram vistos pela última vez.
 
+O histórico guarda **mudanças, não coletas**: uma linha nova só quando preço, "de",
+preço final ou cupom mudam. A última vez que o produto foi visto fica em
+`ofertas.atualizada_em`, e o gráfico do painel vai até ela. Assim o volume cresce com
+as mudanças de preço, não com o número de rodadas. Para compactar um histórico gravado
+antes disso, rode `sql/002_historico_so_mudancas.sql` uma vez, com o scraper parado
+(opcional: apaga só as linhas repetidas).
+
 Quando a loja confirma que o produto está sem estoque, a linha de `ofertas` é removida;
 o histórico fica, e o preço de referência continua guardado em `referencias_precos`,
 para que o produto, ao voltar, seja comparado com o mesmo preço. Em bancos criados antes
