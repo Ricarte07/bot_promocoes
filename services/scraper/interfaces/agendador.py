@@ -4,11 +4,12 @@ Uso, dentro de services/scraper com o .venv ativo:
     python -m interfaces.agendador                      # roda para sempre, no intervalo configurado
     python -m interfaces.agendador --uma-vez            # roda uma rodada e sai
     python -m interfaces.agendador --intervalo-minutos 5
+    python -m interfaces.agendador --uma-vez --limite-urls 3   # rodada curta, para testar
 
 PERSISTENCIA escolhe postgres ou memoria; FONTE_PRODUTOS escolhe json ou postgres.
 EVENTOS_TRANSPORTE escolhe console, redis ou postgres (fila ainda sem consumidor Go).
 Quando EVENTOS_TRANSPORTE=redis, REDIS_URL configura a publicação no Redis.
-SCRAPER_INTERVALO_MINUTOS define o intervalo entre rodadas (padrão 30);
+SCRAPER_INTERVALO_MINUTOS define o intervalo entre rodadas (padrão 15);
 --intervalo-minutos tem prioridade sobre ela.
 O .env da raiz do projeto é lido na partida, então basta preenchê-lo uma vez.
 """
@@ -17,6 +18,7 @@ import argparse
 import logging
 import os
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -98,14 +100,37 @@ def montar_coletor(
     return ColetorComposto(coletores)
 
 
+def limitar_produtos(produtos: list[ProdutoMonitorado], limite: int) -> list[ProdutoMonitorado]:
+    """Rodada curta para teste: até `limite` endereços, alternando entre as lojas.
+
+    Alternar evita que os primeiros da lista sejam todos da mesma loja. Listagens
+    seguem só a primeira página, porque cada página já traz vários produtos.
+    """
+    por_loja: dict[str, list[ProdutoMonitorado]] = {}
+    for produto in produtos:
+        por_loja.setdefault(produto.loja, []).append(produto)
+    escolhidos: list[ProdutoMonitorado] = []
+    while len(escolhidos) < limite and any(por_loja.values()):
+        for fila in por_loja.values():
+            if fila and len(escolhidos) < limite:
+                escolhidos.append(fila.pop(0))
+    return [replace(p, paginas=1) if p.tipo == TIPO_LISTAGEM else p for p in escolhidos]
+
+
 def executar_rodada(
     fonte: FonteDeProdutosMonitorados,
     repositorio: OfertaRepositorio,
     publicador: PublicadorDeEventos,
     fabricas: dict[tuple[str, str], FabricaDeColetor] = FABRICAS_DE_COLETOR,
+    limite_urls: Optional[int] = None,
 ) -> int:
-    """Uma rodada completa: lê a lista, coleta, processa e devolve quantas promoções saíram."""
+    """Uma rodada completa: lê a lista, coleta, processa e devolve quantas promoções saíram.
+
+    Com limite_urls, coleta só esse tanto de endereços (veja limitar_produtos).
+    """
     produtos = fonte.listar()
+    if limite_urls is not None:
+        produtos = limitar_produtos(produtos, limite_urls)
     coletor = montar_coletor(produtos, fabricas, ReaproveitarSeNaoMudou(repositorio))
     caso_de_uso = ProcessarColeta(coletor, repositorio, publicador)
     return caso_de_uso.executar()
@@ -143,7 +168,7 @@ def carregar_dotenv(caminho: Path) -> None:
             os.environ[chave] = valor
 
 
-INTERVALO_PADRAO_MINUTOS = 30
+INTERVALO_PADRAO_MINUTOS = 15
 
 
 def minutos_positivos(texto: str) -> float:
@@ -157,6 +182,17 @@ def minutos_positivos(texto: str) -> float:
     return minutos
 
 
+def inteiro_positivo(texto: str) -> int:
+    """Converte "3" em 3; recusa zero, negativo, decimal e texto."""
+    try:
+        numero = int(str(texto).strip())
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{texto!r} não é um número inteiro")
+    if numero <= 0:
+        raise argparse.ArgumentTypeError("o limite precisa ser maior que zero")
+    return numero
+
+
 def montar_parser() -> argparse.ArgumentParser:
     """Opções da linha de comando; os padrões vêm do ambiente, já com o .env carregado."""
     parser = argparse.ArgumentParser(description="Agendador do scraper de promoções")
@@ -167,9 +203,14 @@ def montar_parser() -> argparse.ArgumentParser:
         "--intervalo-minutos",
         type=minutos_positivos,
         default=os.environ.get("SCRAPER_INTERVALO_MINUTOS") or str(INTERVALO_PADRAO_MINUTOS),
-        help="tempo entre rodadas (padrão: variável SCRAPER_INTERVALO_MINUTOS, ou 30)",
+        help="tempo entre rodadas (padrão: variável SCRAPER_INTERVALO_MINUTOS, ou 15)",
     )
     parser.add_argument("--uma-vez", action="store_true", help="roda uma rodada e sai")
+    parser.add_argument(
+        "--limite-urls", type=inteiro_positivo, default=None, metavar="N",
+        help="rodada curta para teste: coleta só N endereços (alterna entre as lojas; "
+             "listagens seguem só a 1ª página)",
+    )
     parser.add_argument(
         "--redis-url",
         default=os.environ.get("REDIS_URL"),
@@ -306,8 +347,10 @@ def main(argumentos: Optional[list[str]] = None) -> None:
             repositorio = (postgres.OfertaRepositorioPostgres(conexao)
                            if opcoes.persistencia == "postgres" else repositorio_memoria)
             publicador = PublicadorPostgres(conexao) if opcoes.eventos == "postgres" else publicador_fixo
-            return executar_rodada(fonte, repositorio, publicador)
+            return executar_rodada(fonte, repositorio, publicador, limite_urls=opcoes.limite_urls)
 
+        if opcoes.limite_urls:
+            logger.info("Modo de teste: cada rodada coleta no máximo %d endereço(s)", opcoes.limite_urls)
         if not opcoes.uma_vez:
             logger.info("Rodadas a cada %g minuto(s)", opcoes.intervalo_minutos)
         executar_em_laco(

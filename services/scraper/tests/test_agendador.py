@@ -20,6 +20,8 @@ from application.conferencia import ReaproveitarSeNaoMudou
 from interfaces.agendador import (
     carregar_dotenv,
     executar_rodada,
+    inteiro_positivo,
+    limitar_produtos,
     minutos_positivos,
     montar_coletor,
     montar_parser,
@@ -243,14 +245,14 @@ def test_minutos_positivos_recusa_zero_negativo_e_texto():
             minutos_positivos(invalido)
 
 
-def test_intervalo_padrao_e_30_sem_variavel(monkeypatch):
+def test_intervalo_padrao_e_15_sem_variavel(monkeypatch):
     monkeypatch.delenv("SCRAPER_INTERVALO_MINUTOS", raising=False)
-    assert montar_parser().parse_args([]).intervalo_minutos == 30
+    assert montar_parser().parse_args([]).intervalo_minutos == 15
 
 
 def test_intervalo_vem_da_variavel_de_ambiente(monkeypatch):
-    monkeypatch.setenv("SCRAPER_INTERVALO_MINUTOS", "15")
-    assert montar_parser().parse_args([]).intervalo_minutos == 15
+    monkeypatch.setenv("SCRAPER_INTERVALO_MINUTOS", "7")
+    assert montar_parser().parse_args([]).intervalo_minutos == 7
 
 
 def test_opcao_da_linha_de_comando_vence_a_variavel(monkeypatch):
@@ -262,3 +264,40 @@ def test_variavel_invalida_derruba_na_partida(monkeypatch):
     monkeypatch.setenv("SCRAPER_INTERVALO_MINUTOS", "zero")
     with pytest.raises(SystemExit):
         montar_parser().parse_args([])
+
+
+def test_limitar_produtos_alterna_entre_as_lojas_e_respeita_o_limite():
+    produtos = [
+        ProdutoMonitorado("kabum", "k1"),
+        ProdutoMonitorado("kabum", "k2"),
+        ProdutoMonitorado("kabum", "k3"),
+        ProdutoMonitorado("americanas", "a1"),
+    ]
+
+    assert [p.url for p in limitar_produtos(produtos, 3)] == ["k1", "a1", "k2"]
+    assert [p.url for p in limitar_produtos(produtos, 99)] == ["k1", "a1", "k2", "k3"]
+
+
+def test_limitar_produtos_segue_so_a_primeira_pagina_das_listagens():
+    produtos = [ProdutoMonitorado("kabum", "cat1", tipo="listagem", paginas=5)]
+
+    assert limitar_produtos(produtos, 1)[0].paginas == 1
+
+
+def test_rodada_com_limite_coleta_so_os_primeiros_enderecos():
+    fonte = FonteFalsa([ProdutoMonitorado("kabum", "k1"), ProdutoMonitorado("kabum", "k2")])
+    repositorio = OfertaRepositorioEmMemoria()
+    publicador = PublicadorNoConsole(escrever=lambda _: None)
+
+    executar_rodada(fonte, repositorio, publicador, fabricas_com_preco("100"), limite_urls=1)
+
+    assert repositorio.buscar("k1", "kabum") is not None
+    assert repositorio.buscar("k2", "kabum") is None
+
+
+def test_limite_urls_vem_da_linha_de_comando_e_recusa_valor_invalido():
+    assert montar_parser().parse_args([]).limite_urls is None
+    assert montar_parser().parse_args(["--limite-urls", "3"]).limite_urls == 3
+    for invalido in ("0", "-1", "2.5", "abc"):
+        with pytest.raises(argparse.ArgumentTypeError):
+            inteiro_positivo(invalido)
