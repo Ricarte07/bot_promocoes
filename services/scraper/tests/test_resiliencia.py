@@ -155,7 +155,7 @@ def test_main_continuo_reconecta_depois_que_a_conexao_cai(monkeypatch):
 
     rodadas = []
 
-    def rodada_falsa(fonte, repositorio, publicador):
+    def rodada_falsa(fonte, repositorio, publicador, limite_urls=None):
         rodadas.append(repositorio.conexao)
         if len(rodadas) == 1:
             repositorio.conexao.broken = True  # o banco derrubou a conexão no meio
