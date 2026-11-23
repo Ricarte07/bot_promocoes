@@ -8,6 +8,9 @@ Para adicionar uma loja:
 1. escreva uma função pura extrair_produto(html) -> ProdutoExtraido;
 2. crie uma subclasse de ColetorPorUrls com `loja` e `extrair` definidos;
 3. registre a fábrica em interfaces/agendador.py.
+
+Listagens de categoria (várias páginas de produtos) têm a base própria,
+ColetorDeListagem, em infrastructure/scrapers/listagem.py.
 """
 
 import logging
