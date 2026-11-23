@@ -106,23 +106,54 @@ class OfertaRepositorioPostgres(OfertaRepositorio):
                  oferta.preco_referencia.valor, oferta.preco_atual.valor, preco_de,
                  oferta.preco_final.valor, codigo, percentual, oferta.em_promocao),
             )
+            # O histórico guarda mudanças, não coletas: uma linha nova só quando
+            # preço, "de", preço final ou cupom diferem da última linha do produto.
+            # Quando o produto foi visto pela última vez fica em ofertas.atualizada_em.
             self.conexao.execute(
                 """INSERT INTO public.historico_precos
                 (loja,produto_id,preco,preco_de,preco_final,cupom_codigo,cupom_desconto_percentual)
-                VALUES (%s,%s,%s,%s,%s,%s,%s)""",
-                (oferta.loja, oferta.produto_id, oferta.preco_atual.valor, preco_de,
-                 oferta.preco_final.valor, codigo, percentual),
+                SELECT %(loja)s, %(produto_id)s, %(preco)s::numeric, %(preco_de)s::numeric,
+                       %(preco_final)s::numeric, %(codigo)s::text, %(percentual)s::numeric
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM (
+                        SELECT preco, preco_de, preco_final, cupom_codigo, cupom_desconto_percentual
+                        FROM public.historico_precos
+                        WHERE loja=%(loja)s AND produto_id=%(produto_id)s
+                        ORDER BY coletado_em DESC, id DESC LIMIT 1
+                    ) ultima
+                    WHERE ultima.preco = %(preco)s::numeric
+                      AND ultima.preco_de IS NOT DISTINCT FROM %(preco_de)s::numeric
+                      AND ultima.preco_final = %(preco_final)s::numeric
+                      AND ultima.cupom_codigo IS NOT DISTINCT FROM %(codigo)s::text
+                      AND ultima.cupom_desconto_percentual IS NOT DISTINCT FROM %(percentual)s::numeric
+                )""",
+                {"loja": oferta.loja, "produto_id": oferta.produto_id,
+                 "preco": oferta.preco_atual.valor, "preco_de": preco_de,
+                 "preco_final": oferta.preco_final.valor, "codigo": codigo,
+                 "percentual": percentual},
             )
 
     def historico_recente(self, produto_id: str, loja: str) -> HistoricoRecente:
         # Usa o índice (loja, produto_id, coletado_em). Roda dentro da transação
         # do produto, antes de salvar: a coleta atual ainda não está no histórico.
+        #
+        # Como o histórico só guarda mudanças, o preço que valia no começo da
+        # janela de 30 dias está na última linha anterior a ela: um preço que não
+        # muda há 40 dias continua sendo "o menor dos últimos 30 dias".
         row = self.conexao.execute(
-            """SELECT min(preco_final) FILTER (
-                          WHERE coletado_em >= clock_timestamp() - interval '30 days') AS menor,
-                      extract(epoch FROM clock_timestamp() - min(coletado_em)) / 86400 AS dias
-               FROM public.historico_precos WHERE loja=%s AND produto_id=%s""",
-            (loja, produto_id),
+            """SELECT least(
+                   (SELECT min(preco_final) FROM public.historico_precos
+                     WHERE loja=%(loja)s AND produto_id=%(produto_id)s
+                       AND coletado_em >= clock_timestamp() - interval '30 days'),
+                   (SELECT preco_final FROM public.historico_precos
+                     WHERE loja=%(loja)s AND produto_id=%(produto_id)s
+                       AND coletado_em < clock_timestamp() - interval '30 days'
+                     ORDER BY coletado_em DESC, id DESC LIMIT 1)
+               ) AS menor,
+               (SELECT extract(epoch FROM clock_timestamp() - min(coletado_em)) / 86400
+                  FROM public.historico_precos
+                 WHERE loja=%(loja)s AND produto_id=%(produto_id)s) AS dias""",
+            {"loja": loja, "produto_id": produto_id},
         ).fetchone()
         if row is None or row['dias'] is None:
             return HistoricoRecente()

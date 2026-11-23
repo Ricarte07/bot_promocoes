@@ -162,7 +162,7 @@ def test_repositorio_em_memoria_responde_menor_preco_e_dias_acompanhado():
     assert repositorio.historico_recente("rtx", "kabum") == HistoricoRecente()
 
     oferta = Oferta("rtx", "kabum", p("3670.64"))
-    for dia, preco in ((0, "3670.64"), (5, "3199.99"), (40, "6678.23")):
+    for dia, preco in ((0, "3670.64"), (5, "3199.99"), (8, "3499.99"), (40, "6678.23")):
         relogio[0] = datetime(2026, 11, 1, tzinfo=timezone.utc) + timedelta(days=dia)
         oferta.registrar_preco(p(preco))
         repositorio.salvar(oferta)
@@ -170,5 +170,25 @@ def test_repositorio_em_memoria_responde_menor_preco_e_dias_acompanhado():
     relogio[0] += timedelta(days=1)
     historico = repositorio.historico_recente("rtx", "kabum")
     assert historico.dias_acompanhado == 41
-    # 3.199,99 foi há 36 dias: fora da janela; dentro dela só sobrou 6.678,23.
-    assert historico.menor_preco_30_dias == p("6678.23")
+    # A janela começa no dia 11. O histórico guarda mudanças: 3.499,99 (dia 8) valeu
+    # até o dia 40, então entra; 3.199,99 deixou de valer no dia 8, fora da janela.
+    assert historico.menor_preco_30_dias == p("3499.99")
+
+
+def test_repositorio_em_memoria_guarda_so_mudancas_e_o_preco_parado_continua_valendo():
+    from datetime import datetime, timedelta, timezone
+
+    from infrastructure.persistencia.memoria import OfertaRepositorioEmMemoria
+
+    relogio = [datetime(2026, 11, 1, tzinfo=timezone.utc)]
+    repositorio = OfertaRepositorioEmMemoria(agora=lambda: relogio[0])
+    oferta = Oferta("rtx", "kabum", p("3199.99"))
+    for dia in range(0, 45, 5):  # o mesmo preço, coletado a cada 5 dias
+        relogio[0] = datetime(2026, 11, 1, tzinfo=timezone.utc) + timedelta(days=dia)
+        oferta.registrar_preco(p("3199.99"))
+        repositorio.salvar(oferta)
+
+    historico = repositorio.historico_recente("rtx", "kabum")
+    # Uma linha só, do dia 0, fora da janela: o preço parado ainda é o menor dos 30 dias.
+    assert historico.menor_preco_30_dias == p("3199.99")
+    assert historico.dias_acompanhado == 40

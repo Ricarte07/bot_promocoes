@@ -31,8 +31,9 @@ if host and not host.startswith('/') and host not in ('localhost','127.0.0.1',':
     params.setdefault('sslmode','require')
 with psycopg.connect(**params,row_factory=dict_row,connect_timeout=5,prepare_threshold=None,options='-c default_transaction_read_only=on -c statement_timeout=8000') as c:
     offers=c.execute('SELECT loja,produto_id,nome,url,preco_atual,preco_final,preco_de,preco_referencia,cupom_codigo,cupom_desconto_percentual,atualizada_em FROM public.ofertas ORDER BY loja,produto_id').fetchall()
-    # Só a primeira coleta, cada mudança de preço e a coleta mais recente de cada
-    # produto: o volume cresce com as mudanças de preço, não com as coletas.
+    # Só a primeira linha, cada mudança de preço e a mais recente de cada produto.
+    # O scraper já grava só mudanças (também de cupom e "de"); a consulta descarta as
+    # que não mudam o preço do gráfico.
     history=c.execute(HISTORY).fetchall()
 print(json.dumps(dict(offers=offers,history=history),default=str))
 `;
@@ -65,10 +66,29 @@ export function mapDatabaseProducts(data: DatabaseRows): Product[] {
     product.couponDiscount = row.cupom_desconto_percentual == null ? null : Number(row.cupom_desconto_percentual);
     product.finalPrice = Number(row.preco_final);
 
-    product.history = historyByProduct.get(`${product.store}:${product.id}`) ?? [];
+    product.history = closeAtLastVisit(
+      historyByProduct.get(`${product.store}:${product.id}`) ?? [],
+      product.price,
+      row.atualizada_em,
+    );
 
     return product;
   });
+}
+
+// O histórico guarda mudanças, não coletas: a última linha é a última mudança.
+// Um ponto em atualizada_em (a última vez que o scraper viu o produto) leva a
+// linha do gráfico até hoje com o preço que continua valendo.
+export function closeAtLastVisit(
+  history: Product['history'],
+  price: number | null,
+  lastVisit: string | null | undefined,
+): Product['history'] {
+  const last = history.at(-1);
+  if (!last || price == null || !lastVisit) return history;
+  const visit = Date.parse(lastVisit);
+  if (Number.isNaN(visit) || visit <= Date.parse(last.date)) return history;
+  return [...history, { price, date: lastVisit }];
 }
 
 export async function readPostgresProducts(): Promise<Product[]> {
