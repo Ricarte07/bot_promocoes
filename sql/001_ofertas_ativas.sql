@@ -12,7 +12,7 @@ SELECT loja, produto_id, preco_referencia FROM public.ofertas;
 
 ALTER TABLE public.historico_precos
     DROP CONSTRAINT historico_precos_loja_produto_id_fkey,
-    ADD CONSTRAINT historico_precos_referencia_fk FOREIGN KEY (loja, produto_id)
+    ADD CONSTRAINT historico_precos_loja_produto_id_fkey FOREIGN KEY (loja, produto_id)
         REFERENCES public.referencias_precos (loja, produto_id);
 
 ALTER TABLE public.referencias_precos ENABLE ROW LEVEL SECURITY;
