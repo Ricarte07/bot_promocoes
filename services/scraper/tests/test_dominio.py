@@ -205,3 +205,51 @@ def test_queda_adicional_durante_a_promocao_dispara_de_novo():
     eventos = oferta.coletar_eventos()
     assert len(eventos) == 1
     assert eventos[0].desconto_percentual == Decimal("28.00")
+
+
+# --- Memento: EstadoOferta / Oferta.restaurar --------------------------------
+
+
+def _oferta_em_promocao():
+    oferta = Oferta("1", "kabum", Preco(Decimal("1000")), nome="Placa", url="https://loja/1")
+    oferta.registrar_preco(Preco(Decimal("900")), cupom=Cupom("DEZ", Decimal("10")),
+                           preco_de=Preco(Decimal("1200")))
+    oferta.coletar_eventos()
+    return oferta
+
+
+def test_restaurar_devolve_a_mesma_foto_sem_gerar_evento():
+    from domain.oferta import EstadoOferta
+    original = _oferta_em_promocao()
+
+    restaurada = Oferta.restaurar(original.estado())
+
+    assert restaurada.estado() == original.estado()
+    assert isinstance(original.estado(), EstadoOferta)
+    assert restaurada.em_promocao
+    assert restaurada.preco_final.valor == Decimal("810.00")
+    assert restaurada.coletar_eventos() == []
+
+
+def test_oferta_restaurada_continua_de_onde_parou():
+    restaurada = Oferta.restaurar(_oferta_em_promocao().estado())
+    cupom = Cupom("DEZ", Decimal("10"))
+
+    # Mesmo preço: já estava em promoção, não repete o anúncio.
+    restaurada.registrar_preco(Preco(Decimal("900")), cupom=cupom, preco_de=Preco(Decimal("1200")))
+    assert restaurada.coletar_eventos() == []
+    # Caiu mais: anuncia de novo.
+    restaurada.registrar_preco(Preco(Decimal("850")), cupom=cupom, preco_de=Preco(Decimal("1200")))
+    assert len(restaurada.coletar_eventos()) == 1
+
+
+def test_repositorio_em_memoria_devolve_oferta_nova_a_cada_busca():
+    from infrastructure.persistencia.memoria import OfertaRepositorioEmMemoria
+    repositorio = OfertaRepositorioEmMemoria()
+    repositorio.salvar(_oferta_em_promocao())
+
+    primeira = repositorio.buscar("1", "kabum")
+    primeira.registrar_preco(Preco(Decimal("1")))  # mudança não salva
+
+    assert repositorio.buscar("1", "kabum").preco_atual.valor == Decimal("900")
+    assert repositorio.buscar("1", "kabum") is not repositorio.buscar("1", "kabum")
