@@ -18,16 +18,24 @@ class OfertaRepositorioEmMemoria(OfertaRepositorio):
 
     def __init__(self, agora: Callable[[], datetime] = _agora):
         self._ofertas: dict[tuple[str, str], Oferta] = {}
+        self._precos_referencia: dict[tuple[str, str], Preco] = {}
         self._historico: dict[tuple[str, str], list[tuple[datetime, Preco]]] = {}
         self._agora = agora
 
     def buscar(self, produto_id: str, loja: str) -> Optional[Oferta]:
         return self._ofertas.get((produto_id, loja))
 
+    def buscar_preco_referencia(self, produto_id: str, loja: str) -> Optional[Preco]:
+        return self._precos_referencia.get((produto_id, loja))
+
     def salvar(self, oferta: Oferta) -> None:
         chave = (oferta.produto_id, oferta.loja)
+        self._precos_referencia.setdefault(chave, oferta.preco_referencia)
         self._ofertas[chave] = oferta
         self._historico.setdefault(chave, []).append((self._agora(), oferta.preco_final))
+
+    def remover(self, produto_id: str, loja: str) -> None:
+        self._ofertas.pop((produto_id, loja), None)
 
     def historico_recente(self, produto_id: str, loja: str) -> HistoricoRecente:
         observacoes = self._historico.get((produto_id, loja), [])

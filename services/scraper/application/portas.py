@@ -20,6 +20,17 @@ class PrecoColetado:
     preco_de: Optional[Preco] = None  # preço "de" que a loja anuncia, se houver
 
 
+@dataclass(frozen=True)
+class ProdutoSemEstoque:
+    """A loja confirmou que o produto está indisponível: a oferta guardada sai."""
+
+    produto_id: str
+    loja: str
+
+
+ObservacaoDeProduto = PrecoColetado | ProdutoSemEstoque
+
+
 TIPO_PRODUTO = "produto"
 TIPO_LISTAGEM = "listagem"
 
@@ -44,7 +55,7 @@ class ColetorDePrecos(ABC):
     """Porta de entrada: cada loja terá um adaptador em infrastructure/scrapers."""
 
     @abstractmethod
-    def coletar(self) -> list[PrecoColetado]: ...
+    def coletar(self) -> list[ObservacaoDeProduto]: ...
 
 
 class FonteDeProdutosMonitorados(ABC):
