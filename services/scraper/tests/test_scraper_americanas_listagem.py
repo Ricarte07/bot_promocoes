@@ -10,6 +10,7 @@ from domain.cupom import Cupom
 from infrastructure.scrapers.americanas_listagem import (
     ColetorListagemAmericanas,
     extrair_listagem,
+    extrair_pagina,
     url_do_produto,
 )
 from infrastructure.scrapers.base import PaginaInvalida
@@ -91,8 +92,8 @@ def montar(paginas: dict[str, str], listagens: list[ProdutoMonitorado]):
     return coletor, baixar, esperas
 
 
-def listagem(url: str = URL_LISTAGEM) -> ProdutoMonitorado:
-    return ProdutoMonitorado("americanas", url, tipo="listagem")
+def listagem(url: str = URL_LISTAGEM, paginas: int = 1) -> ProdutoMonitorado:
+    return ProdutoMonitorado("americanas", url, tipo="listagem", paginas=paginas)
 
 
 def test_coleta_so_os_disponiveis_com_loja_url_cupom_e_preco_de():
@@ -123,3 +124,31 @@ def test_espera_entre_listagens_e_falha_nao_derruba_a_rodada():
     assert [i.produto_id for i in itens] == ["8776497"]
     assert baixar.urls_pedidas == [outra, URL_LISTAGEM]
     assert esperas == [2.0]
+
+
+def test_pagina_informa_quantas_paginas_a_categoria_tem():
+    pagina = extrair_pagina(ler_fixture("americanas_listagem.html"))
+
+    # A fixture traz 2 produtos na página e "totalCount": 33 na categoria.
+    assert (pagina.pagina_atual, pagina.total_paginas) == (1, 17)
+    assert pagina.tem_proxima
+
+
+def test_pedir_mais_paginas_le_so_a_primeira_e_avisa(caplog):
+    coletor, baixar, esperas = montar(
+        {URL_LISTAGEM: ler_fixture("americanas_listagem.html")}, [listagem(paginas=3)])
+
+    itens = [i for i in coletor.coletar() if isinstance(i, PrecoColetado)]
+
+    assert [i.produto_id for i in itens] == ["8776497"]
+    assert baixar.urls_pedidas == [URL_LISTAGEM]
+    assert esperas == []
+    assert "não sei abrir a página 2" in caplog.text
+
+
+def test_com_uma_pagina_configurada_nao_ha_aviso(caplog):
+    coletor, _, _ = montar({URL_LISTAGEM: ler_fixture("americanas_listagem.html")}, [listagem()])
+
+    coletor.coletar()
+
+    assert "não sei abrir" not in caplog.text

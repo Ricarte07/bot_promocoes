@@ -5,39 +5,36 @@ Ele pega uma pagina de categoria e vai embutir no __NEXT_DATA__, sendo 12 por ve
 """
 
 import json
-import logging
+import math
 import re
-import time
-from dataclasses import dataclass
 from decimal import Decimal
-from typing import Callable, Optional
+from typing import Optional
 
-import requests
-
-from application.portas import ColetorDePrecos, ObservacaoDeProduto, ProdutoMonitorado
 from infrastructure.scrapers.americanas import (
     LOJA,
     ProdutoAmericanas,
     extrair_cupom,
     ler_preco,
 )
-from infrastructure.scrapers.base import PaginaInvalida, baixar_html, converter
+from infrastructure.scrapers.base import PaginaInvalida
+from infrastructure.scrapers.listagem import ColetorDeListagem, ItemDeListagem, PaginaDeListagem
 
 _PADRAO_NEXT_DATA = re.compile(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.S)
 _EM_ESTOQUE = "https://schema.org/InStock"
 _SUFIXO_NOME = " | Americanas"
 
-logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class ItemListagem:
-    produto: ProdutoAmericanas
-    url: str
+ItemListagem = ItemDeListagem  # nome que este módulo já usava
 
 
 def extrair_listagem(html: str) -> list[ItemListagem]:
     """Função pura: lê os produtos de uma página de categoria."""
+    return extrair_pagina(html).itens
+
+
+def extrair_pagina(html: str) -> PaginaDeListagem:
+    """Função pura: lê os produtos e quantas páginas a categoria tem."""
     encontrado = _PADRAO_NEXT_DATA.search(html)
     if encontrado is None:
         raise PaginaInvalida("não encontrei o bloco __NEXT_DATA__ na página")
@@ -53,7 +50,11 @@ def extrair_listagem(html: str) -> list[ItemListagem]:
         item = _converter_item((aresta or {}).get("node") or {})
         if item is not None:
             itens.append(item)
-    return itens
+
+    total = ((conteudo["search"]["products"].get("pageInfo") or {}).get("totalCount")) or 0
+    por_pagina = len(arestas) or 1
+    return PaginaDeListagem(itens=itens, pagina_atual=1,
+                            total_paginas=max(1, math.ceil(int(total) / por_pagina)))
 
 
 def _converter_item(no: dict) -> Optional[ItemListagem]:
@@ -110,40 +111,17 @@ def url_do_produto(slug: str) -> str:
     return f"https://www.americanas.com.br/{slug.strip('/')}/p"
 
 
-class ColetorListagemAmericanas(ColetorDePrecos):
-    """Percorre listagens de categoria da Americanas e devolve os produtos disponíveis."""
+class ColetorListagemAmericanas(ColetorDeListagem):
+    """Percorre listagens de categoria da Americanas e devolve os produtos.
+
+    O laço das páginas e as esperas vêm de ColetorDeListagem. A Americanas só
+    entrega pronta a primeira página: as seguintes chegam ao navegador por uma
+    API à parte, e a URL ignora ?page=N. Por isso url_da_pagina fica com o
+    padrão (só a primeira), e uma listagem com "paginas" maior que 1 avisa no
+    log quantas páginas ficaram de fora, em vez de ignorar a configuração calada.
+    """
 
     loja = LOJA
 
-    def __init__(
-        self,
-        listagens: list[ProdutoMonitorado],
-        baixar: Callable[[str], str] = baixar_html,
-        intervalo_segundos: float = 2.0,
-        esperar: Callable[[float], None] = time.sleep,
-    ):
-        self.listagens = list(listagens)
-        self._baixar = baixar
-        self._intervalo = intervalo_segundos
-        self._esperar = esperar
-
-    def coletar(self) -> list[ObservacaoDeProduto]:
-        coletados: list[ObservacaoDeProduto] = []
-
-        for posicao, listagem in enumerate(self.listagens):
-            if posicao > 0 and self._intervalo > 0:
-                self._esperar(self._intervalo)
-
-            try:
-                itens = extrair_listagem(self._baixar(listagem.url))
-            except (requests.RequestException, PaginaInvalida, ValueError) as erro:
-                logger.warning("%s: falha ao coletar a listagem %s: %s", self.loja, listagem.url, erro)
-                continue
-
-            logger.info("%s: listagem %s, %d produto(s)", self.loja, listagem.url, len(itens))
-            for item in itens:
-                coletado = converter(item.produto, item.url, self.loja)
-                if coletado is not None:
-                    coletados.append(coletado)
-
-        return coletados
+    def extrair_pagina(self, html: str) -> PaginaDeListagem:
+        return extrair_pagina(html)
