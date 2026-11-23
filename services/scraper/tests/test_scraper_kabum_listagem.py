@@ -1,3 +1,4 @@
+from application.portas import PrecoColetado, ProdutoSemEstoque
 import json
 import re
 from decimal import Decimal
@@ -160,7 +161,7 @@ def listagem(url: str = URL_LISTAGEM, paginas: int = 1) -> ProdutoMonitorado:
 def test_coleta_so_os_disponiveis_com_loja_url_e_cupom():
     coletor, _, _ = montar({URL_LISTAGEM: ler_fixture("kabum_listagem.html")}, [listagem()])
 
-    itens = coletor.coletar()
+    itens = [i for i in coletor.coletar() if isinstance(i, PrecoColetado)]
 
     assert [i.produto_id for i in itens] == ["996572", "694714"]
     assert itens[0].loja == "kabum"

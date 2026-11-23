@@ -3,6 +3,7 @@ from contextlib import nullcontext
 from typing import Optional
 
 from domain.oferta import Oferta
+from domain.preco import Preco
 from domain.regras_promocao import HistoricoRecente
 
 
@@ -24,3 +25,10 @@ class OfertaRepositorio(ABC):
         "de" da loja segue sem conferência, marcado como informado pela loja.
         """
         return HistoricoRecente()
+
+    def buscar_preco_referencia(self, produto_id: str, loja: str) -> Optional[Preco]:
+        """Preço de referência guardado, mesmo depois que a oferta saiu de promoção."""
+        return None
+
+    def remover(self, produto_id: str, loja: str) -> None:
+        """Tira a oferta guardada. Repositório sem persistência não tem o que tirar."""

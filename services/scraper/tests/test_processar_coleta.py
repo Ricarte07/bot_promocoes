@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from application.portas import ColetorDePrecos, PrecoColetado, PublicadorDeEventos
+from application.portas import ColetorDePrecos, PrecoColetado, ProdutoSemEstoque, PublicadorDeEventos
 from application.processar_coleta import ProcessarColeta
 from domain.cupom import Cupom
 from domain.preco import Preco
@@ -89,3 +89,23 @@ def test_desconto_anunciado_publica_ja_na_primeira_coleta():
     assert caso_de_uso.executar() == 1
     assert publicador.publicados[0].preco_referencia == Decimal("1300")
     assert publicador.publicados[0].desconto_percentual == Decimal("23.08")
+
+
+def test_sem_estoque_remove_a_oferta_guardada():
+    coletor, _, caso_de_uso = montar()
+    coletor.precos = [item("1000")]
+    caso_de_uso.executar()
+    coletor.precos = [ProdutoSemEstoque("notebook-x", "loja-a")]
+    caso_de_uso.executar()
+    assert caso_de_uso.repositorio.buscar("notebook-x", "loja-a") is None
+
+
+def test_oferta_que_volta_mantem_o_preco_de_referencia():
+    coletor, _, caso_de_uso = montar()
+    coletor.precos = [item("1000")]
+    caso_de_uso.executar()
+    coletor.precos = [ProdutoSemEstoque("notebook-x", "loja-a")]
+    caso_de_uso.executar()
+    coletor.precos = [item("900")]
+    caso_de_uso.executar()
+    assert caso_de_uso.repositorio.buscar("notebook-x", "loja-a").preco_referencia.valor == Decimal("1000")
