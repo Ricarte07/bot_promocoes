@@ -1,3 +1,4 @@
+from application.portas import PrecoColetado, ProdutoSemEstoque
 from decimal import Decimal
 from pathlib import Path
 
@@ -97,7 +98,7 @@ def listagem(url: str = URL_LISTAGEM) -> ProdutoMonitorado:
 def test_coleta_so_os_disponiveis_com_loja_url_cupom_e_preco_de():
     coletor, _, _ = montar({URL_LISTAGEM: ler_fixture("americanas_listagem.html")}, [listagem()])
 
-    itens = coletor.coletar()
+    itens = [i for i in coletor.coletar() if isinstance(i, PrecoColetado)]
 
     assert [i.produto_id for i in itens] == ["8776497"]
     assert itens[0].loja == "americanas"
@@ -117,7 +118,7 @@ def test_espera_entre_listagens_e_falha_nao_derruba_a_rodada():
         [listagem(outra), listagem()],
     )
 
-    itens = coletor.coletar()
+    itens = [i for i in coletor.coletar() if isinstance(i, PrecoColetado)]
 
     assert [i.produto_id for i in itens] == ["8776497"]
     assert baixar.urls_pedidas == [outra, URL_LISTAGEM]

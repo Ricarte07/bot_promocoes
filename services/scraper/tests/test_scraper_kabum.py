@@ -1,3 +1,4 @@
+from application.portas import PrecoColetado, ProdutoSemEstoque
 from decimal import Decimal
 from pathlib import Path
 
@@ -169,7 +170,8 @@ def test_ignora_produto_sem_estoque():
 
     itens = coletor.coletar()
 
-    assert [item.produto_id for item in itens] == ["415807"]
+    assert [item.produto_id for item in itens if isinstance(item, PrecoColetado)] == ["415807"]
+    assert [item for item in itens if isinstance(item, ProdutoSemEstoque)] == [ProdutoSemEstoque("412289", "kabum")]
 
 
 def test_espera_o_intervalo_entre_requisicoes_mas_nao_antes_da_primeira():

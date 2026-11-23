@@ -19,7 +19,12 @@ from typing import Callable, Optional
 
 import requests
 
-from application.portas import ColetorDePrecos, PrecoColetado
+from application.portas import (
+    ColetorDePrecos,
+    ObservacaoDeProduto,
+    PrecoColetado,
+    ProdutoSemEstoque,
+)
 from domain.cupom import Cupom
 from domain.preco import Preco
 
@@ -79,8 +84,8 @@ class ColetorPorUrls(ColetorDePrecos):
     def extrair(self, html: str) -> ProdutoExtraido:
         """Lê o HTML da loja e devolve o produto. Deve lançar PaginaInvalida se não conseguir."""
 
-    def coletar(self) -> list[PrecoColetado]:
-        coletados: list[PrecoColetado] = []
+    def coletar(self) -> list[ObservacaoDeProduto]:
+        coletados: list[ObservacaoDeProduto] = []
 
         for posicao, url in enumerate(self.urls):
             if posicao > 0 and self._intervalo > 0:
@@ -92,7 +97,7 @@ class ColetorPorUrls(ColetorDePrecos):
 
         return coletados
 
-    def _coletar_um(self, url: str) -> Optional[PrecoColetado]:
+    def _coletar_um(self, url: str) -> Optional[ObservacaoDeProduto]:
         try:
             produto = self.extrair(self._baixar(url))
         except (requests.RequestException, PaginaInvalida) as erro:
@@ -104,8 +109,8 @@ class ColetorPorUrls(ColetorDePrecos):
 
 def converter(
     produto: ProdutoExtraido, url: str, loja: str, registrar_no_log: bool = True
-) -> Optional[PrecoColetado]:
-    """Transforma o produto cru em PrecoColetado; produto sem estoque vira None.
+) -> ObservacaoDeProduto:
+    """Transforma o produto cru em PrecoColetado; produto sem estoque vira ProdutoSemEstoque.
 
     Compartilhada entre os coletores de produto e de listagem, para que o log e
     as regras de conversão sejam os mesmos. registrar_no_log=False serve para
@@ -113,8 +118,8 @@ def converter(
     """
     if not produto.disponivel:
         if registrar_no_log:
-            logger.info("%s: produto %s sem estoque, ignorado", loja, produto.produto_id)
-        return None
+            logger.info("%s: produto %s sem estoque", loja, produto.produto_id)
+        return ProdutoSemEstoque(produto.produto_id, loja)
 
     if registrar_no_log:
         logger.info(

@@ -14,7 +14,7 @@ from typing import Callable, Optional
 
 import requests
 
-from application.portas import ColetorDePrecos, PrecoColetado, ProdutoMonitorado
+from application.portas import ColetorDePrecos, ObservacaoDeProduto, ProdutoMonitorado
 from infrastructure.scrapers.americanas import (
     LOJA,
     ProdutoAmericanas,
@@ -127,8 +127,8 @@ class ColetorListagemAmericanas(ColetorDePrecos):
         self._intervalo = intervalo_segundos
         self._esperar = esperar
 
-    def coletar(self) -> list[PrecoColetado]:
-        coletados: list[PrecoColetado] = []
+    def coletar(self) -> list[ObservacaoDeProduto]:
+        coletados: list[ObservacaoDeProduto] = []
 
         for posicao, listagem in enumerate(self.listagens):
             if posicao > 0 and self._intervalo > 0:

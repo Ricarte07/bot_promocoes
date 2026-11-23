@@ -22,7 +22,12 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 import requests
 
 from application.conferencia import JaConfirmado, nada_confirmado
-from application.portas import ColetorDePrecos, PrecoColetado, ProdutoMonitorado
+from application.portas import (
+    ColetorDePrecos,
+    ObservacaoDeProduto,
+    ProdutoMonitorado,
+    ProdutoSemEstoque,
+)
 from infrastructure.scrapers.base import PaginaInvalida, baixar_html, converter
 from infrastructure.scrapers.kabum import (
     LOJA,
@@ -151,8 +156,8 @@ class ColetorListagemKabum(ColetorDePrecos):
         self._intervalo = intervalo_segundos
         self._esperar = esperar
 
-    def coletar(self) -> list[PrecoColetado]:
-        coletados: list[PrecoColetado] = []
+    def coletar(self) -> list[ObservacaoDeProduto]:
+        coletados: list[ObservacaoDeProduto] = []
         primeira_requisicao = True
 
         for listagem in self.listagens:
@@ -184,11 +189,12 @@ class ColetorListagemKabum(ColetorDePrecos):
         )
         return listagem
 
-    def _converter(self, listagem: ListagemKabum) -> list[PrecoColetado]:
+    def _converter(self, listagem: ListagemKabum) -> list[ObservacaoDeProduto]:
         coletados = []
         conferidos = sem_mudanca = 0
         for item in listagem.itens:
             if not item.produto.disponivel:
+                coletados.append(ProdutoSemEstoque(item.produto.produto_id, self.loja))
                 continue
             da_listagem = converter(item.produto, item.url, self.loja, registrar_no_log=False)
             confirmado = self._ja_confirmado(da_listagem) if da_listagem is not None else None

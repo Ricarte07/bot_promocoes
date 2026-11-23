@@ -10,6 +10,12 @@ CREATE TABLE public.produtos_monitorados (
     ativo boolean NOT NULL DEFAULT true,
     UNIQUE (loja, url)
 );
+CREATE TABLE public.referencias_precos (
+    loja text NOT NULL,
+    produto_id text NOT NULL,
+    preco_referencia numeric NOT NULL CHECK (preco_referencia > 0),
+    PRIMARY KEY (loja, produto_id)
+);
 CREATE TABLE public.ofertas (
     loja text NOT NULL,
     produto_id text NOT NULL,
@@ -36,7 +42,7 @@ CREATE TABLE public.historico_precos (
     cupom_codigo text,
     cupom_desconto_percentual numeric CHECK (cupom_desconto_percentual > 0 AND cupom_desconto_percentual < 100),
     coletado_em timestamptz NOT NULL DEFAULT clock_timestamp(),
-    FOREIGN KEY (loja, produto_id) REFERENCES public.ofertas (loja, produto_id),
+    FOREIGN KEY (loja, produto_id) REFERENCES public.referencias_precos (loja, produto_id),
     CHECK (cupom_codigo IS NOT NULL OR cupom_desconto_percentual IS NULL)
 );
 CREATE INDEX historico_produto_data_idx ON public.historico_precos (loja, produto_id, coletado_em, id);
@@ -55,10 +61,11 @@ CREATE TABLE public.eventos_pendentes (
 CREATE INDEX eventos_pendentes_disponiveis_idx ON public.eventos_pendentes (disponivel_em, id) WHERE enviado_em IS NULL;
 ALTER TABLE public.produtos_monitorados ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ofertas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.referencias_precos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.historico_precos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.eventos_pendentes ENABLE ROW LEVEL SECURITY;
 -- Só o backend, conectado como proprietário, tem acesso. Nenhuma política pública.
-REVOKE ALL ON public.produtos_monitorados, public.ofertas, public.historico_precos, public.eventos_pendentes FROM PUBLIC;
+REVOKE ALL ON public.produtos_monitorados, public.ofertas, public.referencias_precos, public.historico_precos, public.eventos_pendentes FROM PUBLIC;
 REVOKE ALL ON SEQUENCE public.produtos_monitorados_id_seq, public.historico_precos_id_seq, public.eventos_pendentes_id_seq FROM PUBLIC;
 -- Estes papéis existem no Supabase, mas não necessariamente no PostgreSQL local.
 DO $$
@@ -66,7 +73,7 @@ DECLARE papel text;
 BEGIN
     FOREACH papel IN ARRAY ARRAY['anon', 'authenticated', 'service_role'] LOOP
         IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = papel) THEN
-            EXECUTE format('REVOKE ALL ON public.produtos_monitorados, public.ofertas, public.historico_precos, public.eventos_pendentes FROM %I', papel);
+            EXECUTE format('REVOKE ALL ON public.produtos_monitorados, public.ofertas, public.referencias_precos, public.historico_precos, public.eventos_pendentes FROM %I', papel);
             EXECUTE format('REVOKE ALL ON SEQUENCE public.produtos_monitorados_id_seq, public.historico_precos_id_seq, public.eventos_pendentes_id_seq FROM %I', papel);
         END IF;
     END LOOP;
