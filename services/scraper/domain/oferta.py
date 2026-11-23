@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Optional
 
 from domain.cupom import Cupom
@@ -12,6 +13,27 @@ from domain.regras_promocao import (
     Regra,
     cadeia_padrao,
 )
+
+
+@dataclass(frozen=True)
+class EstadoOferta:
+    """Memento: a foto do que a oferta precisa para continuar de onde parou.
+
+    Quem guarda a oferta (o repositório) grava e lê esta foto, sem conhecer os
+    atributos da Oferta nem mexer neles por fora. Eventos não entram: são o que
+    aconteceu numa coleta, não estado.
+    """
+
+    produto_id: str
+    loja: str
+    preco_referencia: Preco
+    preco_atual: Preco
+    preco_final: Preco
+    preco_de: Optional[Preco] = None
+    cupom: Optional[Cupom] = None
+    em_promocao: bool = False
+    nome: str = ""
+    url: str = ""
 
 
 class Oferta:
@@ -90,6 +112,37 @@ class Oferta:
                     base_desconto=promocao.origem or "",
                 )
             )
+
+    def estado(self) -> EstadoOferta:
+        """A foto do estado atual, para o repositório gravar."""
+        return EstadoOferta(
+            produto_id=self.produto_id,
+            loja=self.loja,
+            preco_referencia=self.preco_referencia,
+            preco_atual=self.preco_atual,
+            preco_final=self.preco_final,
+            preco_de=self.preco_de,
+            cupom=self.cupom,
+            em_promocao=self.em_promocao,
+            nome=self.nome,
+            url=self.url,
+        )
+
+    @classmethod
+    def restaurar(cls, estado: EstadoOferta) -> "Oferta":
+        """Recria a oferta a partir de uma foto gravada.
+
+        Não passa por registrar_preco: carregar o que já foi visto não é uma
+        coleta nova, então não decide promoção nem gera evento.
+        """
+        oferta = cls(estado.produto_id, estado.loja, estado.preco_referencia,
+                     nome=estado.nome, url=estado.url)
+        oferta.preco_atual = estado.preco_atual
+        oferta.preco_final = estado.preco_final
+        oferta.preco_de = estado.preco_de
+        oferta.cupom = estado.cupom
+        oferta.em_promocao = estado.em_promocao
+        return oferta
 
     def coletar_eventos(self) -> list[PromocaoDetectada]:
         eventos, self._eventos = self._eventos, []

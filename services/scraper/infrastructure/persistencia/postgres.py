@@ -8,7 +8,7 @@ from psycopg.conninfo import conninfo_to_dict
 
 from application.portas import FonteDeProdutosMonitorados, ProdutoMonitorado
 from domain.cupom import Cupom
-from domain.oferta import Oferta
+from domain.oferta import EstadoOferta, Oferta
 from domain.preco import Preco
 from domain.regras_promocao import HistoricoRecente
 from domain.repositorios import OfertaRepositorio
@@ -58,14 +58,20 @@ class OfertaRepositorioPostgres(OfertaRepositorio):
         ).fetchone()
         if row is None:
             return None
-        oferta = Oferta(produto_id, loja, Preco(row['preco_referencia']), row['nome'], row['url'])
         # Reidratar sem registrar_preco: carregar estado não é uma nova coleta/evento.
-        oferta.preco_atual = Preco(row['preco_atual'])
-        oferta.preco_de = Preco(row['preco_de']) if row['preco_de'] is not None else None
-        oferta.preco_final = Preco(row['preco_final'])
-        oferta.cupom = Cupom(row['cupom_codigo'], row['cupom_desconto_percentual']) if row['cupom_codigo'] else None
-        oferta.em_promocao = row['em_promocao']
-        return oferta
+        return Oferta.restaurar(EstadoOferta(
+            produto_id=produto_id,
+            loja=loja,
+            nome=row['nome'],
+            url=row['url'],
+            preco_referencia=Preco(row['preco_referencia']),
+            preco_atual=Preco(row['preco_atual']),
+            preco_final=Preco(row['preco_final']),
+            preco_de=Preco(row['preco_de']) if row['preco_de'] is not None else None,
+            cupom=(Cupom(row['cupom_codigo'], row['cupom_desconto_percentual'])
+                   if row['cupom_codigo'] else None),
+            em_promocao=row['em_promocao'],
+        ))
 
     def buscar_preco_referencia(self, produto_id: str, loja: str):
         row = self.conexao.execute(
@@ -81,15 +87,16 @@ class OfertaRepositorioPostgres(OfertaRepositorio):
         )
 
     def salvar(self, oferta: Oferta) -> None:
-        codigo = oferta.cupom.codigo if oferta.cupom else None
-        percentual = oferta.cupom.desconto_percentual if oferta.cupom else None
-        preco_de = oferta.preco_de.valor if oferta.preco_de else None
+        e = oferta.estado()
+        codigo = e.cupom.codigo if e.cupom else None
+        percentual = e.cupom.desconto_percentual if e.cupom else None
+        preco_de = e.preco_de.valor if e.preco_de else None
         with self.conexao.transaction():
             # O preço de referência é gravado uma vez, mesmo que a oferta saia e volte.
             self.conexao.execute(
                 """INSERT INTO public.referencias_precos (loja,produto_id,preco_referencia)
                 VALUES (%s,%s,%s) ON CONFLICT (loja,produto_id) DO NOTHING""",
-                (oferta.loja, oferta.produto_id, oferta.preco_referencia.valor),
+                (e.loja, e.produto_id, e.preco_referencia.valor),
             )
             self.conexao.execute(
                 """INSERT INTO public.ofertas
@@ -102,9 +109,9 @@ class OfertaRepositorioPostgres(OfertaRepositorio):
                 cupom_codigo=EXCLUDED.cupom_codigo,
                 cupom_desconto_percentual=EXCLUDED.cupom_desconto_percentual,
                 em_promocao=EXCLUDED.em_promocao,atualizada_em=clock_timestamp()""",
-                (oferta.loja, oferta.produto_id, oferta.nome, oferta.url,
-                 oferta.preco_referencia.valor, oferta.preco_atual.valor, preco_de,
-                 oferta.preco_final.valor, codigo, percentual, oferta.em_promocao),
+                (e.loja, e.produto_id, e.nome, e.url,
+                 e.preco_referencia.valor, e.preco_atual.valor, preco_de,
+                 e.preco_final.valor, codigo, percentual, e.em_promocao),
             )
             # O histórico guarda mudanças, não coletas: uma linha nova só quando
             # preço, "de", preço final ou cupom diferem da última linha do produto.
@@ -127,9 +134,9 @@ class OfertaRepositorioPostgres(OfertaRepositorio):
                       AND ultima.cupom_codigo IS NOT DISTINCT FROM %(codigo)s::text
                       AND ultima.cupom_desconto_percentual IS NOT DISTINCT FROM %(percentual)s::numeric
                 )""",
-                {"loja": oferta.loja, "produto_id": oferta.produto_id,
-                 "preco": oferta.preco_atual.valor, "preco_de": preco_de,
-                 "preco_final": oferta.preco_final.valor, "codigo": codigo,
+                {"loja": e.loja, "produto_id": e.produto_id,
+                 "preco": e.preco_atual.valor, "preco_de": preco_de,
+                 "preco_final": e.preco_final.valor, "codigo": codigo,
                  "percentual": percentual},
             )
 
