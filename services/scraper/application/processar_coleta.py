@@ -1,4 +1,4 @@
-from application.portas import ColetorDePrecos, PublicadorDeEventos
+from application.portas import ColetorDePrecos, ProdutoSemEstoque, PublicadorDeEventos
 from domain.oferta import Oferta
 from domain.repositorios import OfertaRepositorio
 
@@ -20,13 +20,19 @@ class ProcessarColeta:
 
         for item in self.coletor.coletar():
             with self.repositorio.transacao(item.produto_id, item.loja):
+                if isinstance(item, ProdutoSemEstoque):
+                    self.repositorio.remover(item.produto_id, item.loja)
+                    continue
+
                 oferta = self.repositorio.buscar(item.produto_id, item.loja)
 
                 if oferta is None:
+                    # Oferta que já saiu de promoção guarda o preço de referência; reaproveitá-lo.
+                    referencia = self.repositorio.buscar_preco_referencia(item.produto_id, item.loja)
                     oferta = Oferta(
                         item.produto_id,
                         item.loja,
-                        preco_referencia=item.preco,
+                        preco_referencia=referencia or item.preco,
                         nome=item.nome,
                         url=item.url,
                     )

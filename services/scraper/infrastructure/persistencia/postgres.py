@@ -67,11 +67,30 @@ class OfertaRepositorioPostgres(OfertaRepositorio):
         oferta.em_promocao = row['em_promocao']
         return oferta
 
+    def buscar_preco_referencia(self, produto_id: str, loja: str):
+        row = self.conexao.execute(
+            "SELECT preco_referencia FROM public.referencias_precos WHERE loja=%s AND produto_id=%s",
+            (loja, produto_id),
+        ).fetchone()
+        return Preco(row['preco_referencia']) if row else None
+
+    def remover(self, produto_id: str, loja: str) -> None:
+        self.conexao.execute(
+            "DELETE FROM public.ofertas WHERE loja=%s AND produto_id=%s",
+            (loja, produto_id),
+        )
+
     def salvar(self, oferta: Oferta) -> None:
         codigo = oferta.cupom.codigo if oferta.cupom else None
         percentual = oferta.cupom.desconto_percentual if oferta.cupom else None
         preco_de = oferta.preco_de.valor if oferta.preco_de else None
         with self.conexao.transaction():
+            # O preço de referência é gravado uma vez, mesmo que a oferta saia e volte.
+            self.conexao.execute(
+                """INSERT INTO public.referencias_precos (loja,produto_id,preco_referencia)
+                VALUES (%s,%s,%s) ON CONFLICT (loja,produto_id) DO NOTHING""",
+                (oferta.loja, oferta.produto_id, oferta.preco_referencia.valor),
+            )
             self.conexao.execute(
                 """INSERT INTO public.ofertas
                 (loja,produto_id,nome,url,preco_referencia,preco_atual,preco_de,
@@ -94,7 +113,6 @@ class OfertaRepositorioPostgres(OfertaRepositorio):
                 (oferta.loja, oferta.produto_id, oferta.preco_atual.valor, preco_de,
                  oferta.preco_final.valor, codigo, percentual),
             )
-
 
     def historico_recente(self, produto_id: str, loja: str) -> HistoricoRecente:
         # Usa o índice (loja, produto_id, coletado_em). Roda dentro da transação

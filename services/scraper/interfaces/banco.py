@@ -25,7 +25,8 @@ def main():
                         (produto.loja, produto.url, produto.tipo, produto.paginas),
                     )
         # Consultas fixas; nenhuma credencial ou payload é exibido.
-        for tabela in ('produtos_monitorados', 'ofertas', 'historico_precos', 'eventos_pendentes'):
+        for tabela in ('produtos_monitorados', 'ofertas', 'referencias_precos',
+                       'historico_precos', 'eventos_pendentes'):
             from psycopg import sql
             total = conexao.execute(sql.SQL('SELECT count(*) AS total FROM public.{}').format(
                 sql.Identifier(tabela))).fetchone()['total']
