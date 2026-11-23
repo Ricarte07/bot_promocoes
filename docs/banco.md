@@ -101,10 +101,10 @@ select current_database(), current_user;
 select table_schema, table_name
 from information_schema.tables
 where table_schema = 'public'
-  and table_name in ('ofertas','historico_precos','produtos_monitorados','eventos_pendentes');
+  and table_name in ('ofertas','referencias_precos','historico_precos','produtos_monitorados','eventos_pendentes');
 ```
 
-Se nenhuma das quatro tabelas aparecer, execute o conteúdo de `sql/schema.sql` no
+Se nenhuma das cinco tabelas aparecer, execute o conteúdo de `sql/schema.sql` no
 mesmo editor. Se alguma já existir, **não apague nada**: compare as colunas com o
 script e prepare uma migração específica. O script roda numa única transação e
 falha em vez de ignorar tabelas incompatíveis.
@@ -176,6 +176,11 @@ on conflict (loja,url) do nothing;
 Cada produto encontrado numa categoria vira uma linha de `ofertas` e novas linhas de
 histórico. Produtos coletados continuam no catálogo mesmo se a categoria for
 desativada; a data informa quando foram vistos pela última vez.
+
+Quando a loja confirma que o produto está sem estoque, a linha de `ofertas` é removida;
+o histórico fica, e o preço de referência continua guardado em `referencias_precos`,
+para que o produto, ao voltar, seja comparado com o mesmo preço. Em bancos criados antes
+dessa tabela, aplique `sql/001_ofertas_ativas.sql` uma vez, com o scraper parado.
 
 Modo local sem banco nem Redis (a memória se perde ao encerrar):
 
