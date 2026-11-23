@@ -14,7 +14,6 @@ import json
 import logging
 import re
 import time
-from dataclasses import dataclass
 from decimal import Decimal
 from typing import Callable, Optional
 from urllib.parse import urlencode, urlsplit, urlunsplit
@@ -22,12 +21,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 import requests
 
 from application.conferencia import JaConfirmado, nada_confirmado
-from application.portas import (
-    ColetorDePrecos,
-    ObservacaoDeProduto,
-    ProdutoMonitorado,
-    ProdutoSemEstoque,
-)
+from application.portas import ObservacaoDeProduto, ProdutoMonitorado, ProdutoSemEstoque
 from infrastructure.scrapers.base import PaginaInvalida, baixar_html, converter
 from infrastructure.scrapers.kabum import (
     LOJA,
@@ -36,6 +30,7 @@ from infrastructure.scrapers.kabum import (
     extrair_produto,
     ler_preco_de,
 )
+from infrastructure.scrapers.listagem import ColetorDeListagem, ItemDeListagem, PaginaDeListagem
 
 TAMANHO_PAGINA = 60
 _PADRAO_NEXT_DATA = re.compile(
@@ -45,21 +40,9 @@ _PADRAO_NEXT_DATA = re.compile(
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class ItemListagem:
-    produto: ProdutoKabum
-    url: str
-
-
-@dataclass(frozen=True)
-class ListagemKabum:
-    itens: list[ItemListagem]
-    pagina_atual: int
-    total_paginas: int
-
-    @property
-    def tem_proxima(self) -> bool:
-        return self.pagina_atual < self.total_paginas
+# Os formatos comuns a toda listagem, com os nomes que este módulo já usava.
+ItemListagem = ItemDeListagem
+ListagemKabum = PaginaDeListagem
 
 
 def extrair_listagem(html: str) -> ListagemKabum:
@@ -129,8 +112,11 @@ def url_da_pagina(url_listagem: str, numero: int) -> str:
     return urlunsplit((partes.scheme, partes.netloc, partes.path, consulta, ""))
 
 
-class ColetorListagemKabum(ColetorDePrecos):
+class ColetorListagemKabum(ColetorDeListagem):
     """Percorre listagens de categoria da Kabum e devolve todos os produtos disponíveis.
+
+    O laço das páginas e as esperas vêm de ColetorDeListagem. Aqui ficam os
+    passos da Kabum: ler a página, montar a URL da página N e conferir produtos.
 
     A listagem não traz tudo (o percentual do cupom, por exemplo, só aparece
     na página do produto), então cada produto é conferido na própria página,
@@ -149,47 +135,18 @@ class ColetorListagemKabum(ColetorDePrecos):
         baixar_produto: Callable[[str], str] = baixar_html,
         ja_confirmado: JaConfirmado = nada_confirmado,
     ):
-        self.listagens = list(listagens)
-        self._ja_confirmado = ja_confirmado
-        self._baixar = baixar
+        super().__init__(listagens, baixar=baixar, intervalo_segundos=intervalo_segundos,
+                         esperar=esperar)
         self._baixar_produto = baixar_produto
-        self._intervalo = intervalo_segundos
-        self._esperar = esperar
+        self._ja_confirmado = ja_confirmado
 
-    def coletar(self) -> list[ObservacaoDeProduto]:
-        coletados: list[ObservacaoDeProduto] = []
-        primeira_requisicao = True
+    def extrair_pagina(self, html: str) -> ListagemKabum:
+        return extrair_listagem(html)
 
-        for listagem in self.listagens:
-            numero = 1
-            while numero <= max(1, listagem.paginas):
-                if not primeira_requisicao and self._intervalo > 0:
-                    self._esperar(self._intervalo)
-                primeira_requisicao = False
+    def url_da_pagina(self, url_listagem: str, numero: int) -> str:
+        return url_da_pagina(url_listagem, numero)
 
-                pagina = self._coletar_pagina(url_da_pagina(listagem.url, numero))
-                if pagina is None:
-                    break
-                coletados.extend(self._converter(pagina))
-                if not pagina.tem_proxima:
-                    break
-                numero += 1
-
-        return coletados
-
-    def _coletar_pagina(self, url: str) -> Optional[ListagemKabum]:
-        try:
-            listagem = extrair_listagem(self._baixar(url))
-        except (requests.RequestException, PaginaInvalida, ValueError) as erro:
-            logger.warning("%s: falha ao coletar a listagem %s: %s", self.loja, url, erro)
-            return None
-        logger.info(
-            "%s: listagem %s, página %d de %d, %d produto(s)",
-            self.loja, url, listagem.pagina_atual, listagem.total_paginas, len(listagem.itens),
-        )
-        return listagem
-
-    def _converter(self, listagem: ListagemKabum) -> list[ObservacaoDeProduto]:
+    def converter_pagina(self, listagem: ListagemKabum) -> list[ObservacaoDeProduto]:
         coletados = []
         conferidos = sem_mudanca = 0
         for item in listagem.itens:
@@ -197,14 +154,13 @@ class ColetorListagemKabum(ColetorDePrecos):
                 coletados.append(ProdutoSemEstoque(item.produto.produto_id, self.loja))
                 continue
             da_listagem = converter(item.produto, item.url, self.loja, registrar_no_log=False)
-            confirmado = self._ja_confirmado(da_listagem) if da_listagem is not None else None
+            confirmado = self._ja_confirmado(da_listagem)
             if confirmado is not None:
                 coletados.append(confirmado)
                 sem_mudanca += 1
                 continue
             conferidos += 1
-            if self._intervalo > 0:
-                self._esperar(self._intervalo)
+            self.esperar_a_vez()
             try:
                 produto = extrair_produto(self._baixar_produto(item.url))
                 if produto.produto_id != item.produto.produto_id:
@@ -212,9 +168,7 @@ class ColetorListagemKabum(ColetorDePrecos):
             except (requests.RequestException, PaginaInvalida, ValueError) as erro:
                 logger.warning("%s: não confirmei o preço de %s: %s", self.loja, item.url, erro)
                 continue
-            coletado = converter(produto, item.url, self.loja)
-            if coletado is not None:
-                coletados.append(coletado)
+            coletados.append(converter(produto, item.url, self.loja))
         logger.info(
             "%s: %d produto(s) conferido(s) na página, %d sem mudança desde a última coleta",
             self.loja, conferidos, sem_mudanca,
