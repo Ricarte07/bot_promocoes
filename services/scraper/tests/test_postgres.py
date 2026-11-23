@@ -78,7 +78,8 @@ def test_reinicio_historico_cupons_sem_repetir_promocao(banco):
         assert oferta.nome == 'Nome coletado'
         assert oferta.url.endswith('/descoberto/produto')
         assert coletar(c, [item('90', Cupom('VINTE', Decimal('20')), '110')]) == 0
-        assert c.execute('SELECT count(*) AS n FROM public.historico_precos').fetchone()['n'] == 3
+        # A terceira coleta repete a segunda: o histórico guarda só mudanças.
+        assert c.execute('SELECT count(*) AS n FROM public.historico_precos').fetchone()['n'] == 2
         rows = c.execute('SELECT payload FROM public.eventos_pendentes').fetchall()
         assert len(rows) == 1
         assert rows[0]['payload']['versao'] == 3
@@ -144,7 +145,8 @@ def test_coletores_concorrentes_nao_repetem_evento(banco):
         assert sorted(pool.map(lambda _: rodada(), range(2))) == [0, 1]
     with conectar(banco) as c:
         assert c.execute('SELECT count(*) AS n FROM public.ofertas').fetchone()['n'] == 1
-        assert c.execute('SELECT count(*) AS n FROM public.historico_precos').fetchone()['n'] == 2
+        # As duas coletas são iguais: a segunda, serializada pelo lock, não repete a linha.
+        assert c.execute('SELECT count(*) AS n FROM public.historico_precos').fetchone()['n'] == 1
         assert c.execute('SELECT count(*) AS n FROM public.eventos_pendentes').fetchone()['n'] == 1
 
 
@@ -185,3 +187,35 @@ def test_produto_recem_descoberto_tem_de_marcado_como_da_loja(banco):
         assert coletar(c, [item('1000', preco_de='1250', produto_id='novo')]) == 1
         payload = c.execute('SELECT payload FROM public.eventos_pendentes').fetchone()['payload']
         assert payload['base_desconto'] == 'preco_de_loja'
+
+
+def test_historico_guarda_so_mudancas_e_ofertas_guarda_a_ultima_visita(banco):
+    with conectar(banco) as c:
+        contar = lambda: c.execute('SELECT count(*) AS n FROM public.historico_precos').fetchone()['n']
+        visto_em = lambda: c.execute('SELECT atualizada_em FROM public.ofertas').fetchone()['atualizada_em']
+        coletar(c, [item('100')])
+        primeira_visita = visto_em()
+        coletar(c, [item('100')])
+        coletar(c, [item('100.00')])  # mesmo valor com outra escala
+        assert contar() == 1
+        assert visto_em() > primeira_visita
+        coletar(c, [item('100', Cupom('DEZ'))])            # cupom apareceu
+        coletar(c, [item('100', Cupom('DEZ', Decimal('10')))])  # percentual apareceu
+        coletar(c, [item('100', Cupom('DEZ', Decimal('10')), '150')])  # "de" apareceu
+        coletar(c, [item('100', Cupom('DEZ', Decimal('10')), '150')])
+        assert contar() == 4
+
+
+def test_preco_parado_ha_mais_de_30_dias_continua_sendo_o_menor_da_janela(banco):
+    with conectar(banco) as c:
+        coletar(c, [item('3199.99')])
+        c.execute("UPDATE public.historico_precos SET coletado_em = coletado_em - interval '40 days'")
+        coletar(c, [item('3199.99')])  # preço igual: nenhuma linha nova
+        assert c.execute('SELECT count(*) AS n FROM public.historico_precos').fetchone()['n'] == 1
+        historico = OfertaRepositorioPostgres(c).historico_recente('descoberto', 'kabum')
+        assert historico.menor_preco_30_dias.valor == Decimal('3199.99')
+        assert 39.9 < historico.dias_acompanhado < 40.1
+        # Um preço que mudou dentro da janela também entra na conta.
+        coletar(c, [item('3499.99')])
+        historico = OfertaRepositorioPostgres(c).historico_recente('descoberto', 'kabum')
+        assert historico.menor_preco_30_dias.valor == Decimal('3199.99')

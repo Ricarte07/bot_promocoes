@@ -9,7 +9,7 @@ registerHooks({
     return nextResolve(specifier, context);
   },
 });
-const { mapDatabaseProducts, readPostgresProducts } = await import('../lib/catalog/postgres-source.ts');
+const { closeAtLastVisit, mapDatabaseProducts, readPostgresProducts } = await import('../lib/catalog/postgres-source.ts');
 
 test('ofertas descobertas em categorias usam nome e ID coletados, sem depender dos endereços monitorados', () => {
   const [product] = mapDatabaseProducts({
@@ -45,6 +45,28 @@ test('histórico de cada produto fica só com as observações dele, em ordem', 
   assert.deepEqual(kabumB.history.map((p) => p.price), [20]);
   // Mesmo id em outra loja é outro produto.
   assert.deepEqual(americanasA.history.map((p) => p.price), [30]);
+});
+
+test('gráfico vai até a última visita com o preço que continua valendo', () => {
+  const [product] = mapDatabaseProducts({
+    offers: [{ loja: 'kabum', produto_id: 'p', nome: 'P', url: 'https://www.kabum.com.br/produto/1/x',
+      preco_atual: '90', preco_referencia: '100', preco_final: '90',
+      atualizada_em: '2026-11-23 17:18:29.730414+00:00' }],
+    history: [
+      { loja: 'kabum', produto_id: 'p', preco: '100', coletado_em: '2026-11-18 10:00:00+00:00' },
+      { loja: 'kabum', produto_id: 'p', preco: '90', coletado_em: '2026-11-20 10:00:00+00:00' },
+    ],
+  });
+  assert.deepEqual(product.history.map((p) => p.price), [100, 90, 90]);
+  assert.equal(product.history.at(-1).date, '2026-11-23 17:18:29.730414+00:00');
+});
+
+test('sem visita mais nova que a última mudança, o histórico fica como veio', () => {
+  const history = [{ price: 10, date: '2026-11-20 10:00:00+00:00' }];
+  assert.equal(closeAtLastVisit(history, 10, '2026-11-20 10:00:00+00:00'), history);
+  assert.equal(closeAtLastVisit(history, 10, null), history);
+  assert.equal(closeAtLastVisit(history, null, '2026-11-23'), history);
+  assert.deepEqual(closeAtLastVisit([], 10, '2026-11-23'), []);
 });
 
 test('produto sem histórico recebe lista vazia', () => {
