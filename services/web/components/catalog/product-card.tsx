@@ -1,6 +1,8 @@
 import type { Product } from '../../lib/catalog/types';
 import { formatMoney, formatSeenAgo } from '../../lib/products/format';
-import { calculateDiscount, hoursSinceSeen, isPromotion, isStale } from '../../lib/products/selectors';
+import {
+  calculateDiscount, hoursSinceSeen, isPromotion, isStale, ORIGIN_LABELS, promotionDiscount,
+} from '../../lib/products/selectors';
 
 export default function ProductCard({ product, now, onShowHistory }: {
   product: Product;
@@ -9,6 +11,7 @@ export default function ProductCard({ product, now, onShowHistory }: {
 }) {
   const discount = calculateDiscount(product);
   const promotion = isPromotion(product, now);
+  const botPercent = promotion ? promotionDiscount(product) : null;
   const stale = isStale(product, now);
   const seen = hoursSinceSeen(product, now);
   return (
@@ -34,7 +37,10 @@ export default function ProductCard({ product, now, onShowHistory }: {
       </span> : <span className="muted">—</span>}</td>
       <td role="cell" data-label="Desconto">
         {promotion
-          ? <span className="badge promo-badge">{discount != null ? `${discount.toFixed(1)}% · ` : ''}promoção do bot</span>
+          ? <span className={product.discountOrigin === 'preco_de_loja' ? 'badge promo-badge unverified' : 'badge promo-badge'}>
+              {botPercent != null && <strong>{botPercent.toFixed(1)}%</strong>}
+              {product.discountOrigin ? ORIGIN_LABELS[product.discountOrigin] : 'promoção do bot'}
+            </span>
           : discount != null && discount > 0
             ? <span className="muted">{discount.toFixed(1)}%</span>
             : <span className="muted">—</span>}
