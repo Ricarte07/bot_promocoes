@@ -19,9 +19,9 @@ export async function getCatalog(): Promise<Catalog> {
   try {
     if (!['json', 'postgres'].includes(configured)) throw new Error('CATALOG_SOURCE inválida');
     const products = await productSources[source]();
-    return { products, source, error: false };
+    return { products, source, error: false, loadedAt: new Date().toISOString() };
   } catch {
     // Nunca envie credenciais ou mensagens internas do Python ao navegador.
-    return { products: [], source, error: true };
+    return { products: [], source, error: true, loadedAt: new Date().toISOString() };
   }
 }

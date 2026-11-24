@@ -1,16 +1,20 @@
 import type { Product } from '../../lib/catalog/types';
 import { formatMoney } from '../../lib/products/format';
-import { calculateDiscount } from '../../lib/products/selectors';
+import { effectivePrice, FRESH_HOURS, isPromotion, isStale } from '../../lib/products/selectors';
 
 export default function CatalogStats({
   products,
   filtered,
   priced,
+  now,
 }: {
   products: Product[];
   filtered: Product[];
   priced: Product[];
+  now: number;
 }) {
+  const stale = filtered.filter((p) => isStale(p, now)).length;
+  const promotions = filtered.filter((p) => isPromotion(p, now)).length;
   return (
     <div className="stats">
       <article>
@@ -19,13 +23,17 @@ export default function CatalogStats({
         <small>{products.length} no catálogo</small>
       </article>
       <article>
-        <span>Com preço disponível</span>
-        <strong>{priced.length.toString().padStart(2, '0')}</strong>
-        <small>Valores registrados pelo coletor</small>
+        <span>Vistos nas últimas {FRESH_HOURS} h</span>
+        <strong>{(filtered.length - stale).toString().padStart(2, '0')}</strong>
+        <small>
+          {stale
+            ? `${stale} sem atualização há mais de ${FRESH_HOURS} h: o preço pode ter mudado`
+            : 'Todos os preços foram conferidos recentemente'}
+        </small>
       </article>
       <article>
         <span>Menor preço da seleção</span>
-        <strong>{priced.length ? formatMoney(priced[0].price!) : '—'}</strong>
+        <strong>{priced.length ? formatMoney(effectivePrice(priced[0])!) : '—'}</strong>
         <small>
           {priced.length
             ? 'Entre produtos diferentes; não indica melhor custo-benefício'
@@ -33,14 +41,12 @@ export default function CatalogStats({
         </small>
       </article>
       <article>
-        <span>Descontos a partir de 15%</span>
-        <strong>
-          {filtered
-            .filter((p) => (calculateDiscount(p) ?? 0) >= 15)
-            .length.toString()
-            .padStart(2, '0')}
-        </strong>
-        <small>Comparação com a referência registrada; pode incluir desconto Pix</small>
+        <span>Promoções do bot</span>
+        <strong>{promotions.toString().padStart(2, '0')}</strong>
+        <small>
+          As mesmas regras do Telegram, vistas nas últimas {FRESH_HOURS} h. Na Kabum o
+          desconto é sobre o preço no Pix.
+        </small>
       </article>
     </div>
   );
