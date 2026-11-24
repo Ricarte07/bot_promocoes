@@ -1,15 +1,19 @@
 import type { Product } from '../../lib/catalog/types';
-import type { ProductFilters as ProductFiltersValue } from '../../lib/products/selectors';
+import { SORT_LABELS, type ProductFilters as ProductFiltersValue, type SortOrder } from '../../lib/products/selectors';
 
 export default function ProductFilters({
   products,
   filters,
+  order,
   onChange,
+  onOrderChange,
   onClear,
 }: {
   products: Product[];
   filters: ProductFiltersValue;
+  order: SortOrder;
   onChange: (field: keyof ProductFiltersValue, value: string) => void;
+  onOrderChange: (value: SortOrder) => void;
   onClear: () => void;
 }) {
   const { search, store, minimum, maximum, discount, show } = filters;
@@ -79,6 +83,14 @@ export default function ProductFilters({
           <option value="5">5%</option>
           <option value="15">15%</option>
           <option value="30">30%</option>
+        </select>
+      </label>
+      <label>
+        Ordenar por
+        <select value={order} onChange={(e) => onOrderChange(e.target.value as SortOrder)}>
+          {(Object.keys(SORT_LABELS) as SortOrder[]).map((key) => (
+            <option key={key} value={key}>{SORT_LABELS[key]}</option>
+          ))}
         </select>
       </label>
       <button className="clear" type="button" onClick={onClear}>
