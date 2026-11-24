@@ -15,19 +15,35 @@ import {
   filterProducts,
   hasInvalidPriceRange,
   sortByLowestPrice,
+  sortProducts,
   type ProductFilters as Filters,
+  type SortOrder,
 } from '../lib/products/selectors';
+
+// A página abre no que importa: as promoções que o bot decidiu, as maiores primeiro.
+const INITIAL_FILTERS: Filters = { ...EMPTY_FILTERS, show: 'promocoes' };
+// Quantas linhas aparecem de cada vez: o catálogo inteiro passa de 800 produtos.
+const PAGE_SIZE = 50;
 export default function Dashboard({ catalog }: { catalog: Catalog }) {
   const [section, setSection] = useState('Produtos');
-  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<Filters>(INITIAL_FILTERS);
+  const [order, setOrder] = useState<SortOrder>('desconto');
+  const [limit, setLimit] = useState(PAGE_SIZE);
   const [selected, setSelected] = useState('');
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  // Mudar a seleção volta para a primeira página da lista.
   function clearFilters() {
     setFilters(EMPTY_FILTERS);
+    setLimit(PAGE_SIZE);
   }
   function changeFilter(field: keyof Filters, value: string) {
     setFilters((current) => ({ ...current, [field]: value }));
+    setLimit(PAGE_SIZE);
+  }
+  function changeOrder(value: SortOrder) {
+    setOrder(value);
+    setLimit(PAGE_SIZE);
   }
   function showHistory(product: Product) {
     setSelected(`${product.store}:${product.id}`);
@@ -38,7 +54,8 @@ export default function Dashboard({ catalog }: { catalog: Catalog }) {
   // Base fixa para "visto há X" e para o corte de 24 h: a hora em que o servidor leu os dados.
   const now = Date.parse(catalog.loadedAt);
   const invalidRange = hasInvalidPriceRange(filters);
-  const filtered = filterProducts(products, filters, now);
+  const filtered = sortProducts(filterProducts(products, filters, now), order, now);
+  const visible = filtered.slice(0, limit);
   const priced = sortByLowestPrice(filtered);
   const chosen =
     filtered.find((p) => `${p.store}:${p.id}` === selected) ?? filtered[0];
@@ -105,7 +122,9 @@ export default function Dashboard({ catalog }: { catalog: Catalog }) {
             <ProductFilters
               products={products}
               filters={filters}
+              order={order}
               onChange={changeFilter}
+              onOrderChange={changeOrder}
               onClear={clearFilters}
             />
             {invalidRange && (
@@ -114,18 +133,22 @@ export default function Dashboard({ catalog }: { catalog: Catalog }) {
               </p>
             )}
             <p className="result-count" role="status">
-              {filtered.length} produtos encontrados
+              {filtered.length} {filters.show === 'promocoes' ? 'promoções do bot' : 'produtos encontrados'}
+              {filtered.length > visible.length && section === 'Produtos' && ` · mostrando ${visible.length}`}
               {(filters.minimum || filters.maximum || filters.discount) &&
                 ' · Produtos sem o dado filtrado ficam fora da seleção.'}
             </p>
             {section === 'Produtos' &&
               (filtered.length ? (
+                <>
                 <div className="product-table-wrap" tabIndex={0} role="region" aria-label="Lista de produtos">
-                  <table className="product-table">
+                  {/* Os papéis explícitos mantêm a tabela legível para leitores de tela
+                      quando o CSS do celular transforma as linhas em cartões. */}
+                  <table className="product-table" role="table">
                     <caption className="sr-only">Produtos monitorados e seus últimos preços registrados</caption>
-                    <thead><tr><th scope="col">Produto</th><th scope="col">Loja</th><th scope="col">Preço atual</th><th scope="col">Cupom</th><th scope="col">Desconto</th><th scope="col">Ações</th></tr></thead>
-                    <tbody>
-                  {filtered.map((p) => (
+                    <thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">Produto</th><th role="columnheader" scope="col">Loja</th><th role="columnheader" scope="col">Preço atual</th><th role="columnheader" scope="col">Cupom</th><th role="columnheader" scope="col">Desconto</th><th role="columnheader" scope="col">Ações</th></tr></thead>
+                    <tbody role="rowgroup">
+                  {visible.map((p) => (
                     <ProductCard
                       key={`${p.store}:${p.id}`}
                       product={p}
@@ -136,6 +159,15 @@ export default function Dashboard({ catalog }: { catalog: Catalog }) {
                     </tbody>
                   </table>
                 </div>
+                {filtered.length > visible.length && (
+                  <div className="load-more">
+                    <button type="button" onClick={() => setLimit((current) => current + PAGE_SIZE)}>
+                      Mostrar mais {Math.min(PAGE_SIZE, filtered.length - visible.length)}
+                    </button>
+                    <span>{visible.length} de {filtered.length}</span>
+                  </div>
+                )}
+                </>
               ) : (
                 <div className="empty">
                   <h2>
