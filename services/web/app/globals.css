@@ -136,7 +136,6 @@ footer p{width:100%;margin:0}
 .theme-toggle{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-size:12px;white-space:nowrap}
 .theme-toggle svg{width:18px;height:18px}
 :root[data-theme="dark"] .card-actions a{background:var(--green)}
-:root[data-theme="dark"] .history polyline{stroke:var(--green)}
 footer .frog-logo{width:32px;height:32px}
 @media(max-width:600px){.header-inner{flex-wrap:wrap;gap:18px}.header-actions{flex-wrap:wrap;gap:8px}.brand{font-size:23px}.frog-logo{width:36px;height:36px}}
 
@@ -187,3 +186,48 @@ footer{margin-top:32px}
 .stale-label{color:var(--error);font-weight:600}
 .product-row.stale .product-name,.product-row.stale .product-price strong{color:var(--muted)}
 .promo-badge{font-size:12px;font-weight:600;white-space:nowrap}
+/* Legibilidade: corpo de 16 px e nada abaixo de 12 px (a marca "MONITOR DE PREÇOS" é logotipo). */
+body{font-size:16px}
+.eyebrow,.badge,.stats small,.product-table thead th,.coupon-label small,.section-nav button span{font-size:12px}
+label,.store-label,.product-price del,.coupon-label,.row-actions button,.row-actions a,footer,.theme-toggle,.clear,.result-count{font-size:13px}
+table{font-size:14px}
+.product-name{font-size:15px}
+.brand small{font-size:10px}
+/* Filtros se ajustam à largura; a busca fica sozinha na primeira linha. */
+.filters{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.filters .search{grid-column:1/-1}
+/* Lista em páginas de 50. */
+.load-more{display:flex;align-items:center;justify-content:center;gap:16px;margin:20px 0 0}
+.load-more span{color:var(--muted);font-size:13px}
+/* Gráfico do histórico: degraus, eixos com valores e datas, linha do menor preço. */
+.chart-plot{display:grid;grid-template-columns:auto 1fr;column-gap:12px;align-items:stretch}
+.chart-plot svg{width:100%;height:220px;max-height:none;overflow:visible}
+.chart-y{display:flex;flex-direction:column;justify-content:space-between;padding:4px 0;font-size:12px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.chart-y.flat{justify-content:center}
+.chart-x{display:flex;justify-content:space-between;margin:6px 0 4px;font-size:12px;color:var(--muted)}
+.chart-axis{stroke:var(--line);stroke-width:1}
+.chart-lowest{stroke:var(--green);stroke-width:1;stroke-dasharray:5 5;opacity:.7}
+.chart-line{fill:none;stroke:var(--green);stroke-width:3;stroke-linejoin:round}
+.chart-key{display:inline-block;width:22px;border-top:2px dashed var(--green);vertical-align:middle;margin-right:4px}
+/* Telas até 1100 px (celular, tablet e notebook pequeno): cada produto vira um cartão,
+   com rótulo em cada dado e sem rolagem lateral (a tabela completa precisa de ~1100 px). */
+@media(max-width:1100px){
+.product-table-wrap{overflow:visible;border:0;background:transparent}
+.product-table{min-width:0}
+.product-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+.product-table,.product-table tbody,.product-table tr,.product-table th,.product-table td{display:block;width:auto}
+.product-table .product-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px 16px;padding:16px;margin-bottom:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.product-row th,.product-row td,.product-row:last-child td,.product-row:last-child th{padding:0;border:0}
+.product-name{grid-column:1/-1;width:auto;min-width:0;font-size:16px;font-weight:600}
+.product-row td[data-label]::before{content:attr(data-label);content:attr(data-label) / "";display:block;margin-bottom:4px;font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+.actions-cell{grid-column:1/-1}
+.row-actions{display:grid;grid-template-columns:1fr 1fr;white-space:normal}
+.row-actions button,.row-actions a{justify-content:center}
+.seen,.coupon-label small,.promo-badge{white-space:normal}
+}
+/* Celular: o cabeçalho deixa de acompanhar a rolagem e o botão ocupa a largura toda. */
+@media(max-width:640px){
+header{position:static}
+.load-more{flex-direction:column;gap:8px}
+.load-more button{width:100%}
+}

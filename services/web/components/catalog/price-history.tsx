@@ -1,13 +1,10 @@
 import type { Product } from '../../lib/catalog/types';
-import { formatMoney, formatDate } from '../../lib/products/format';
+import { formatMoney, formatDate, formatShortDate } from '../../lib/products/format';
+import { CHART, lowestLineY, stepPath } from '../../lib/products/chart';
 export default function PriceHistory({ product }: { product: Product }) {
   const points = product.history;
   const min = points.length ? Math.min(...points.map((p) => p.price)) : null;
   const max = points.length ? Math.max(...points.map((p) => p.price)) : null;
-  const start = points.length ? new Date(points[0].date).getTime() : 0;
-  const end = points.length
-    ? new Date(points[points.length - 1].date).getTime()
-    : 0;
   return (
     <section className="history">
       <div className="section-heading">
@@ -33,29 +30,33 @@ export default function PriceHistory({ product }: { product: Product }) {
             <strong className="lowest">{formatMoney(min)}</strong>
           </p>
           {points.length > 1 ? (
-            <figure>
-              <svg
-                viewBox="0 0 640 200"
-                role="img"
-                aria-label={`Evolução de ${points.length} preços. Mínimo ${formatMoney(min)}. Máximo ${formatMoney(max!)}.`}
-              >
-                <path d="M20 20V180H620" fill="none" stroke="#ccd5d0" />
-                <polyline
-                  fill="none"
-                  stroke="#187451"
-                  strokeWidth="3"
-                  points={points
-                    .map(
-                      (p) =>
-                        `${20 + ((new Date(p.date).getTime() - start) / (end - start || 1)) * 600},${170 - ((p.price - min) / (max! - min || 1)) * 140}`,
-                    )
-                    .join(' ')}
-                />
-              </svg>
+            <figure className="chart">
+              <div className="chart-plot">
+                {/* Preço que nunca mudou: um rótulo só, no meio, na altura da linha. */}
+                <div className={max === min ? 'chart-y flat' : 'chart-y'} aria-hidden="true">
+                  {max !== min && <span>{formatMoney(max!)}</span>}
+                  <span>{formatMoney(min)}</span>
+                </div>
+                <svg
+                  viewBox={`0 0 ${CHART.width} ${CHART.height}`}
+                  preserveAspectRatio="none"
+                  role="img"
+                  aria-label={`Preço em degraus de ${formatShortDate(points[0].date)} a ${formatShortDate(points[points.length - 1].date)}. Mínimo ${formatMoney(min)}, máximo ${formatMoney(max!)}.`}
+                >
+                  <line className="chart-axis" x1="0" y1={CHART.height} x2={CHART.width} y2={CHART.height} vectorEffect="non-scaling-stroke" />
+                  <line className="chart-lowest" x1="0" y1={lowestLineY(points)} x2={CHART.width} y2={lowestLineY(points)} vectorEffect="non-scaling-stroke" />
+                  <path className="chart-line" d={stepPath(points)} vectorEffect="non-scaling-stroke" />
+                </svg>
+                <span aria-hidden="true" />
+                <div className="chart-x" aria-hidden="true">
+                  <span>{formatShortDate(points[0].date)}</span>
+                  <span>{formatShortDate(points[points.length - 1].date)}</span>
+                </div>
+              </div>
               <figcaption>
-                {formatDate(points[0].date)} —{' '}
-                {formatDate(points[points.length - 1].date)} · Horário de
-                Brasília
+                <span className="chart-key" aria-hidden="true" /> Menor preço registrado ·{' '}
+                {formatDate(points[0].date)} — {formatDate(points[points.length - 1].date)} ·
+                horário de Brasília
               </figcaption>
             </figure>
           ) : (
