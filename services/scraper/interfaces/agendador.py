@@ -1,4 +1,7 @@
-"""Ponto de entrada do scraper: monta as peças e roda rodadas de coleta.
+"""Ponto de entrada do scraper: lê a configuração e roda rodadas de coleta.
+
+Quais peças usar e como ligá-las fica em interfaces/composicao.py; aqui ficam a
+linha de comando, a leitura do .env e o laço das rodadas.
 
 Uso, dentro de services/scraper com o .venv ativo:
     python -m interfaces.agendador                      # roda para sempre, no intervalo configurado
@@ -18,136 +21,22 @@ import argparse
 import logging
 import os
 import time
-from dataclasses import replace
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
-from application.conferencia import JaConfirmado, ReaproveitarSeNaoMudou, nada_confirmado
-from application.portas import (
-    TIPO_LISTAGEM,
-    TIPO_PRODUTO,
-    ColetorDePrecos,
-    FonteDeProdutosMonitorados,
-    PrecoColetado,
-    ProdutoMonitorado,
-    PublicadorDeEventos,
+from interfaces.composicao import (
+    ARQUIVO_PADRAO,
+    FONTES_DE_PRODUTOS,
+    PERSISTENCIAS,
+    TRANSPORTES_DE_EVENTOS,
+    Configuracao,
+    ConfiguracaoInvalida,
+    Montagem,
 )
-from application.processar_coleta import ProcessarColeta
-from domain.repositorios import OfertaRepositorio
-from infrastructure.mensageria.console import PublicadorNoConsole
-from infrastructure.mensageria.redis_streams import PublicadorRedis
-from infrastructure.persistencia.memoria import OfertaRepositorioEmMemoria
-from infrastructure.persistencia.produtos_json import FonteDeProdutosJson
-from infrastructure.scrapers.americanas import LOJA as AMERICANAS
-from infrastructure.scrapers.americanas import ColetorAmericanas
-from infrastructure.scrapers.americanas_listagem import ColetorListagemAmericanas
-from infrastructure.scrapers.kabum import LOJA as KABUM
-from infrastructure.scrapers.kabum import ColetorKabum
-from infrastructure.scrapers.kabum_listagem import ColetorListagemKabum
 
 logger = logging.getLogger(__name__)
 
-ARQUIVO_PADRAO = Path(__file__).resolve().parent.parent / "produtos.json"
 ENV_PADRAO = Path(__file__).resolve().parent.parent.parent.parent / ".env"
-
-# Para adicionar uma loja: escreva o adaptador em infrastructure/scrapers e registre aqui,
-# pela chave (loja, tipo). Uma loja pode ter coletor de produto avulso, de listagem ou os dois.
-# A fábrica recebe também o "já confirmado?" (application/conferencia.py), usado por
-# quem lê preços de uma listagem e confere produto a produto na página (hoje, a Kabum).
-FabricaDeColetor = Callable[[list[ProdutoMonitorado], JaConfirmado], ColetorDePrecos]
-FABRICAS_DE_COLETOR: dict[tuple[str, str], FabricaDeColetor] = {
-    (KABUM, TIPO_PRODUTO): lambda itens, _: ColetorKabum(urls=[item.url for item in itens]),
-    (KABUM, TIPO_LISTAGEM): lambda itens, ja_confirmado: ColetorListagemKabum(
-        listagens=itens, ja_confirmado=ja_confirmado),
-    (AMERICANAS, TIPO_PRODUTO): lambda itens, _: ColetorAmericanas(urls=[item.url for item in itens]),
-    (AMERICANAS, TIPO_LISTAGEM): lambda itens, _: ColetorListagemAmericanas(listagens=itens),
-}
-
-
-class ColetorComposto(ColetorDePrecos):
-    """Junta os coletores de todas as lojas num único ColetorDePrecos."""
-
-    def __init__(self, coletores: list[ColetorDePrecos]):
-        self.coletores = coletores
-
-    def coletar(self) -> list[PrecoColetado]:
-        itens: list[PrecoColetado] = []
-        for coletor in self.coletores:
-            itens.extend(coletor.coletar())
-        return itens
-
-
-def montar_coletor(
-    produtos: list[ProdutoMonitorado],
-    fabricas: dict[tuple[str, str], FabricaDeColetor] = FABRICAS_DE_COLETOR,
-    ja_confirmado: JaConfirmado = nada_confirmado,
-) -> ColetorComposto:
-    """Agrupa os itens por (loja, tipo) e cria um coletor para cada grupo conhecido."""
-    grupos: dict[tuple[str, str], list[ProdutoMonitorado]] = {}
-    for produto in produtos:
-        grupos.setdefault((produto.loja, produto.tipo), []).append(produto)
-
-    coletores: list[ColetorDePrecos] = []
-    for (loja, tipo), itens in grupos.items():
-        fabrica = fabricas.get((loja, tipo))
-        if fabrica is None:
-            logger.warning(
-                "Loja '%s' não tem scraper de %s; %d item(ns) ignorado(s)", loja, tipo, len(itens)
-            )
-            continue
-        coletores.append(fabrica(itens, ja_confirmado))
-
-    return ColetorComposto(coletores)
-
-
-def limitar_produtos(produtos: list[ProdutoMonitorado], limite: int) -> list[ProdutoMonitorado]:
-    """Rodada curta para teste: até `limite` endereços, alternando entre as lojas.
-
-    Alternar evita que os primeiros da lista sejam todos da mesma loja. Listagens
-    seguem só a primeira página, porque cada página já traz vários produtos.
-    """
-    por_loja: dict[str, list[ProdutoMonitorado]] = {}
-    for produto in produtos:
-        por_loja.setdefault(produto.loja, []).append(produto)
-    escolhidos: list[ProdutoMonitorado] = []
-    while len(escolhidos) < limite and any(por_loja.values()):
-        for fila in por_loja.values():
-            if fila and len(escolhidos) < limite:
-                escolhidos.append(fila.pop(0))
-    return [replace(p, paginas=1) if p.tipo == TIPO_LISTAGEM else p for p in escolhidos]
-
-
-def executar_rodada(
-    fonte: FonteDeProdutosMonitorados,
-    repositorio: OfertaRepositorio,
-    publicador: PublicadorDeEventos,
-    fabricas: dict[tuple[str, str], FabricaDeColetor] = FABRICAS_DE_COLETOR,
-    limite_urls: Optional[int] = None,
-) -> int:
-    """Uma rodada completa: lê a lista, coleta, processa e devolve quantas promoções saíram.
-
-    Com limite_urls, coleta só esse tanto de endereços (veja limitar_produtos).
-    """
-    produtos = fonte.listar()
-    if limite_urls is not None:
-        produtos = limitar_produtos(produtos, limite_urls)
-    coletor = montar_coletor(produtos, fabricas, ReaproveitarSeNaoMudou(repositorio))
-    caso_de_uso = ProcessarColeta(coletor, repositorio, publicador)
-    return caso_de_uso.executar()
-
-
-def montar_publicador(redis_url: Optional[str]) -> PublicadorDeEventos:
-    """Redis quando há URL configurada; console caso contrário."""
-    if not redis_url:
-        logger.info("REDIS_URL não definida: promoções serão impressas no console")
-        return PublicadorNoConsole()
-
-    import redis  # importado aqui para que o console funcione mesmo sem o pacote
-
-    cliente = redis.from_url(redis_url, decode_responses=True)
-    cliente.ping()  # falha já na partida se o Redis não estiver acessível
-    logger.info("Publicando promoções no Redis")
-    return PublicadorRedis(cliente)
 
 
 def carregar_dotenv(caminho: Path) -> None:
@@ -217,54 +106,21 @@ def montar_parser() -> argparse.ArgumentParser:
         help="endereço do Redis (padrão: REDIS_URL; usado com --eventos redis)",
     )
     parser.add_argument(
-        "--persistencia", choices=["memoria", "postgres"],
+        "--persistencia", choices=PERSISTENCIAS,
         default=os.environ.get("PERSISTENCIA", "postgres"),
     )
     parser.add_argument(
-        "--fonte-produtos", choices=["json", "postgres"],
+        "--fonte-produtos", choices=FONTES_DE_PRODUTOS,
         default=os.environ.get("FONTE_PRODUTOS", "json"),
     )
     parser.add_argument(
-        "--eventos", choices=["console", "redis", "postgres"],
+        "--eventos", choices=TRANSPORTES_DE_EVENTOS,
         default=os.environ.get("EVENTOS_TRANSPORTE", "console"),
     )
     return parser
 
 
 ESPERA_APOS_FALHA_SEGUNDOS = 60
-
-
-class ConexaoSobDemanda:
-    """Factory Method aplicado à conexão: entrega sempre uma conexão viva.
-
-    A conexão PostgreSQL fica ociosa entre as rodadas e pode ser derrubada pelo
-    servidor, pela rede ou por um reinício do container. Antes de cada rodada,
-    se a anterior estiver fechada ou quebrada, ela é descartada e a fábrica
-    abre outra. Se o banco ainda estiver fora do ar, o erro sobe para a rodada,
-    e a próxima chamada tenta de novo.
-    """
-
-    def __init__(self, fabrica: Callable[[], Any]):
-        self._fabrica = fabrica
-        self._conexao: Any = None
-
-    def obter(self) -> Any:
-        conexao = self._conexao
-        if conexao is None or conexao.closed or getattr(conexao, "broken", False):
-            if conexao is not None:
-                logger.warning("Conexão PostgreSQL perdida; abrindo uma nova")
-            self.fechar()
-            self._conexao = self._fabrica()
-        return self._conexao
-
-    def fechar(self) -> None:
-        conexao, self._conexao = self._conexao, None
-        if conexao is None:
-            return
-        try:
-            conexao.close()
-        except Exception:
-            pass  # já estava quebrada; não há o que liberar
 
 
 def executar_em_laco(
@@ -303,58 +159,33 @@ def main(argumentos: Optional[list[str]] = None) -> None:
     carregar_dotenv(ENV_PADRAO)
     parser = montar_parser()
     opcoes = parser.parse_args(argumentos)
-    for nome, valor, permitidos in (
-        ("PERSISTENCIA", opcoes.persistencia, ("memoria", "postgres")),
-        ("FONTE_PRODUTOS", opcoes.fonte_produtos, ("json", "postgres")),
-        ("EVENTOS_TRANSPORTE", opcoes.eventos, ("console", "redis", "postgres")),
-    ):
-        if valor not in permitidos:
-            parser.error(f"{nome} inválida: escolha {', '.join(permitidos)}")
-    if opcoes.eventos == "postgres" and opcoes.persistencia != "postgres":
-        parser.error("--eventos postgres exige --persistencia postgres")
-    if opcoes.eventos == "redis" and not opcoes.redis_url:
-        parser.error("--eventos redis exige REDIS_URL ou --redis-url")
+    config = Configuracao(
+        persistencia=opcoes.persistencia,
+        fonte_produtos=opcoes.fonte_produtos,
+        eventos=opcoes.eventos,
+        produtos=opcoes.produtos,
+        redis_url=opcoes.redis_url,
+        database_url=os.environ.get("DATABASE_URL", ""),
+        limite_urls=opcoes.limite_urls,
+    )
+    try:
+        config.validar()
+    except ConfiguracaoInvalida as erro:
+        parser.error(str(erro))
 
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
 
-    usa_postgres = opcoes.persistencia == "postgres" or opcoes.fonte_produtos == "postgres"
-    conexoes: Optional[ConexaoSobDemanda] = None
+    montagem = Montagem(config)
     try:
-        if usa_postgres:
-            from infrastructure.persistencia import postgres
-            from infrastructure.mensageria.postgres import PublicadorPostgres
-
-            conexoes = ConexaoSobDemanda(
-                lambda: postgres.conectar(os.environ.get("DATABASE_URL", ""))
-            )
-            conexoes.obter()  # configuração errada derruba já na partida, não na primeira rodada
-
-        # O que não depende da conexão é criado uma vez: a memória precisa durar entre
-        # rodadas, e o cliente Redis já reconecta sozinho no próximo comando.
-        repositorio_memoria = OfertaRepositorioEmMemoria() if opcoes.persistencia == "memoria" else None
-        publicador_fixo = (
-            None if opcoes.eventos == "postgres"
-            else montar_publicador(opcoes.redis_url if opcoes.eventos == "redis" else None)
-        )
-
-        def rodada() -> int:
-            # Peças ligadas ao banco são montadas a cada rodada sobre uma conexão viva.
-            conexao = conexoes.obter() if conexoes else None
-            fonte = (postgres.FonteDeProdutosPostgres(conexao) if opcoes.fonte_produtos == "postgres"
-                     else FonteDeProdutosJson(opcoes.produtos))
-            repositorio = (postgres.OfertaRepositorioPostgres(conexao)
-                           if opcoes.persistencia == "postgres" else repositorio_memoria)
-            publicador = PublicadorPostgres(conexao) if opcoes.eventos == "postgres" else publicador_fixo
-            return executar_rodada(fonte, repositorio, publicador, limite_urls=opcoes.limite_urls)
-
-        if opcoes.limite_urls:
-            logger.info("Modo de teste: cada rodada coleta no máximo %d endereço(s)", opcoes.limite_urls)
+        montagem.iniciar()
+        if config.limite_urls:
+            logger.info("Modo de teste: cada rodada coleta no máximo %d endereço(s)", config.limite_urls)
         if not opcoes.uma_vez:
             logger.info("Rodadas a cada %g minuto(s)", opcoes.intervalo_minutos)
         executar_em_laco(
-            rodada, opcoes.intervalo_minutos * 60, uma_vez=opcoes.uma_vez, esperar=time.sleep
+            montagem.rodada, opcoes.intervalo_minutos * 60, uma_vez=opcoes.uma_vez, esperar=time.sleep
         )
     except Exception:
         # Drivers podem incluir credenciais na mensagem de erro; não imprimir traceback/DSN.
@@ -362,8 +193,7 @@ def main(argumentos: Optional[list[str]] = None) -> None:
                      "tabelas de sql/schema.sql. Não houve troca automática para memória.")
         raise SystemExit(1) from None
     finally:
-        if conexoes is not None:
-            conexoes.fechar()
+        montagem.fechar()
 
 
 if __name__ == "__main__":

@@ -3,7 +3,9 @@
 import pytest
 
 import interfaces.agendador as agendador
-from interfaces.agendador import ConexaoSobDemanda, executar_em_laco
+import interfaces.composicao as composicao
+from interfaces.agendador import executar_em_laco
+from interfaces.composicao import ConexaoSobDemanda
 
 
 class Parar(Exception):
@@ -155,7 +157,7 @@ def test_main_continuo_reconecta_depois_que_a_conexao_cai(monkeypatch):
 
     rodadas = []
 
-    def rodada_falsa(fonte, repositorio, publicador, limite_urls=None):
+    def rodada_falsa(fonte, repositorio, publicador, **_opcoes):
         rodadas.append(repositorio.conexao)
         if len(rodadas) == 1:
             repositorio.conexao.broken = True  # o banco derrubou a conexão no meio
@@ -164,7 +166,7 @@ def test_main_continuo_reconecta_depois_que_a_conexao_cai(monkeypatch):
 
     import infrastructure.persistencia.postgres as postgres
     monkeypatch.setattr(postgres, "conectar", conectar_falso)
-    monkeypatch.setattr(agendador, "executar_rodada", rodada_falsa)
+    monkeypatch.setattr(composicao, "executar_rodada", rodada_falsa)
     monkeypatch.setattr(agendador.time, "sleep", espera_que_para_depois_de(2, []))
     monkeypatch.setenv("DATABASE_URL", "postgresql://u:s@localhost/promo")
 
