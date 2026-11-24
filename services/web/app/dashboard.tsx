@@ -35,8 +35,10 @@ export default function Dashboard({ catalog }: { catalog: Catalog }) {
   }
 
   const products = catalog.products;
+  // Base fixa para "visto há X" e para o corte de 24 h: a hora em que o servidor leu os dados.
+  const now = Date.parse(catalog.loadedAt);
   const invalidRange = hasInvalidPriceRange(filters);
-  const filtered = filterProducts(products, filters);
+  const filtered = filterProducts(products, filters, now);
   const priced = sortByLowestPrice(filtered);
   const chosen =
     filtered.find((p) => `${p.store}:${p.id}` === selected) ?? filtered[0];
@@ -85,7 +87,7 @@ export default function Dashboard({ catalog }: { catalog: Catalog }) {
             {pending ? 'Atualizando…' : '↻ Atualizar dados'}
           </button>
         </div>
-        <CatalogStats products={products} filtered={filtered} priced={priced} />
+        <CatalogStats products={products} filtered={filtered} priced={priced} now={now} />
         {catalog.error ? (
           <section className="empty error" role="alert">
             <h2>Não foi possível carregar os produtos</h2>
@@ -127,6 +129,7 @@ export default function Dashboard({ catalog }: { catalog: Catalog }) {
                     <ProductCard
                       key={`${p.store}:${p.id}`}
                       product={p}
+                      now={now}
                       onShowHistory={showHistory}
                     />
                   ))}

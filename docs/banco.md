@@ -130,6 +130,7 @@ Documentação: [conexões](https://supabase.com/docs/guides/database/connecting
 | `FONTE_PRODUTOS` | `json` (padrão) lê `produtos.json`; `postgres` lê endereços ativos de `produtos_monitorados`. |
 | `EVENTOS_TRANSPORTE` | `console` (padrão seguro), `redis` ou `postgres`. Independente da fonte e da persistência. |
 | `REDIS_URL` | Obrigatória com transporte Redis; também usada pelo notifier. |
+| `PANEL_DATABASE_URL` | Opcional, recomendada: conexão só-leitura da web (veja "Usuário só-leitura do painel"). Sem ela, a web usa a `DATABASE_URL`. |
 | `CATALOG_SOURCE` | `postgres` ou `json`. Sem valor, a web escolhe PostgreSQL se houver `DATABASE_URL`. |
 | `SCRAPER_PYTHON` | Interpretador usado pela web; precisa ter psycopg. Padrão `python3`. |
 | `PRODUCTS_FILE` | Caminho opcional do JSON da web. O scraper usa `--produtos`. |
@@ -140,6 +141,23 @@ Scraper, notifier e web carregam o `.env` da raiz; variáveis já definidas no
 ambiente (ou em `services/web/.env.local`, para a web) têm prioridade. Execute a web
 dentro de `services/web/` e o notifier dentro de `services/notifier/`. Reinicie os
 serviços após mudar a configuração.
+
+## Usuário só-leitura do painel
+
+A web só lê `ofertas` e `historico_precos`. Por padrão ela usa a `DATABASE_URL`
+do scraper, que pode escrever, e se protege só com uma opção de sessão. Para que
+o próprio banco recuse qualquer escrita vinda do painel:
+
+1. Rode `sql/003_painel_somente_leitura.sql` uma vez (no SQL Editor do Supabase),
+   trocando `TROQUE_ESTA_SENHA` por uma senha forte, só com letras e números.
+2. No `.env` da raiz, acrescente `PANEL_DATABASE_URL`, igual à `DATABASE_URL` mas
+   com o usuário e a senha novos. No Supabase, pelo Session pooler, o usuário é
+   `painel_leitura.<id do projeto>` (o mesmo sufixo que aparece em `postgres.<id>`).
+3. Reinicie a web.
+
+O usuário só tem `SELECT` nessas duas tabelas e não enxerga as demais. Mesmo
+desligando o modo só-leitura da sessão, `INSERT`, `UPDATE` e `DELETE` são
+recusados por falta de permissão.
 
 ## Executar sem enviar notificações
 

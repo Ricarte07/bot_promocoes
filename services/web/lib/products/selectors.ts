@@ -7,6 +7,8 @@ export type ProductFilters = {
   minimum: string;
   maximum: string;
   discount: string;
+  // 'promocoes' mostra só o que o bot considera promoção agora.
+  show: string;
 };
 
 export const EMPTY_FILTERS: ProductFilters = {
@@ -15,9 +17,40 @@ export const EMPTY_FILTERS: ProductFilters = {
   minimum: '',
   maximum: '',
   discount: '',
+  show: '',
 };
 
+// Produto não visto pelo scraper nesse tempo deixa de valer como preço atual.
+export const FRESH_HOURS = 24;
+const HOUR = 60 * 60 * 1000;
+
+// Horas desde que o scraper viu o produto; null quando a fonte não informa.
+export function hoursSinceSeen(product: Product, now: number): number | null {
+  if (!product.updated) return null;
+  const seen = Date.parse(product.updated);
+  if (Number.isNaN(seen)) return null;
+  return Math.max(0, (now - seen) / HOUR);
+}
+
+export function isStale(product: Product, now: number): boolean {
+  const hours = hoursSinceSeen(product, now);
+  return hours !== null && hours > FRESH_HOURS;
+}
+
+// Promoção é o que o bot decidiu (as regras de 15%, 30 dias e 7 dias ficam no
+// scraper), desde que o produto tenha sido visto há pouco: um veredito antigo
+// não garante que o preço ainda está lá.
+export function isPromotion(product: Product, now: number): boolean {
+  return product.onSale === true && !isStale(product, now) && hoursSinceSeen(product, now) !== null;
+}
+
+// O que o comprador paga: com o cupom, quando a loja diz quanto ele desconta.
+export function effectivePrice(product: Product): number | null {
+  return product.finalPrice ?? product.price;
+}
+
 // Usa a mesma base do coletor: a que produz o maior desconto sobre o preço final.
+// Serve para mostrar o tamanho do desconto; quem decide se é promoção é o bot.
 export function discountBase(product: Product): number | null {
   const bases = [product.reference, product.listPrice].filter(
     (value): value is number => value != null && value > 0,
@@ -27,7 +60,7 @@ export function discountBase(product: Product): number | null {
 
 export function calculateDiscount(product: Product): number | null {
   const base = discountBase(product);
-  const price = product.finalPrice ?? product.price;
+  const price = effectivePrice(product);
   if (price == null || base === null) return null;
   return Math.max(0, (1 - price / base) * 100);
 }
@@ -43,24 +76,22 @@ export function hasInvalidPriceRange(filters: ProductFilters): boolean {
 export function filterProducts(
   products: Product[],
   filters: ProductFilters,
+  now: number = Date.now(),
 ): Product[] {
   if (hasInvalidPriceRange(filters)) return [];
 
   return products.filter((product) => {
+    if (filters.show === 'promocoes' && !isPromotion(product, now)) return false;
     if (filters.store && product.store !== filters.store) return false;
     if (!product.label.toLowerCase().includes(filters.search.toLowerCase()))
       return false;
 
-    // Preço ausente não pode passar por um filtro que exige preço.
-    if (
-      filters.minimum !== '' &&
-      (product.price === null || product.price < Number(filters.minimum))
-    )
+    // Preço ausente não pode passar por um filtro que exige preço. O filtro usa
+    // o mesmo preço do desconto: o que o comprador paga.
+    const price = effectivePrice(product);
+    if (filters.minimum !== '' && (price === null || price < Number(filters.minimum)))
       return false;
-    if (
-      filters.maximum !== '' &&
-      (product.price === null || product.price > Number(filters.maximum))
-    )
+    if (filters.maximum !== '' && (price === null || price > Number(filters.maximum)))
       return false;
 
     const discount = calculateDiscount(product);
@@ -77,6 +108,6 @@ export function filterProducts(
 export function sortByLowestPrice(products: Product[]): Product[] {
   // filter cria uma nova lista; sort não altera o catálogo original.
   return products
-    .filter((product) => product.price !== null)
-    .sort((first, second) => first.price! - second.price!);
+    .filter((product) => effectivePrice(product) !== null)
+    .sort((first, second) => effectivePrice(first)! - effectivePrice(second)!);
 }

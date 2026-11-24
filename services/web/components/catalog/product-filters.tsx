@@ -12,7 +12,7 @@ export default function ProductFilters({
   onChange: (field: keyof ProductFiltersValue, value: string) => void;
   onClear: () => void;
 }) {
-  const { search, store, minimum, maximum, discount } = filters;
+  const { search, store, minimum, maximum, discount, show } = filters;
   return (
     <form
       className="filters"
@@ -29,6 +29,13 @@ export default function ProductFilters({
         />
       </label>
       <label>
+        Mostrar
+        <select value={show} onChange={(e) => onChange('show', e.target.value)}>
+          <option value="">Todos os produtos</option>
+          <option value="promocoes">Só promoções do bot</option>
+        </select>
+      </label>
+      <label>
         Loja
         <select
           value={store}
@@ -41,7 +48,7 @@ export default function ProductFilters({
         </select>
       </label>
       <label>
-        Preço mínimo
+        Preço mínimo (com cupom)
         <input
           type="number"
           min="0"
@@ -52,7 +59,7 @@ export default function ProductFilters({
         />
       </label>
       <label>
-        Preço máximo
+        Preço máximo (com cupom)
         <input
           type="number"
           min="0"

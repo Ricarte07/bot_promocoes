@@ -23,14 +23,15 @@ ORDER BY coletado_em,id
 import os,json,psycopg
 from psycopg.rows import dict_row
 from psycopg.conninfo import conninfo_to_dict
-params=conninfo_to_dict(os.environ['DATABASE_URL'])
+# PANEL_DATABASE_URL: usuário só-leitura próprio do painel (sql/003_painel_somente_leitura.sql).
+params=conninfo_to_dict(os.environ.get('PANEL_DATABASE_URL') or os.environ['DATABASE_URL'])
 host=params.get('host','')
 if host and not host.startswith('/') and host not in ('localhost','127.0.0.1','::1'):
     if params.get('sslmode','require') not in ('require','verify-ca','verify-full'):
         raise ValueError('PostgreSQL remoto exige SSL')
     params.setdefault('sslmode','require')
 with psycopg.connect(**params,row_factory=dict_row,connect_timeout=5,prepare_threshold=None,options='-c default_transaction_read_only=on -c statement_timeout=8000') as c:
-    offers=c.execute('SELECT loja,produto_id,nome,url,preco_atual,preco_final,preco_de,preco_referencia,cupom_codigo,cupom_desconto_percentual,atualizada_em FROM public.ofertas ORDER BY loja,produto_id').fetchall()
+    offers=c.execute('SELECT loja,produto_id,nome,url,preco_atual,preco_final,preco_de,preco_referencia,cupom_codigo,cupom_desconto_percentual,em_promocao,atualizada_em FROM public.ofertas ORDER BY loja,produto_id').fetchall()
     # Só a primeira linha, cada mudança de preço e a mais recente de cada produto.
     # O scraper já grava só mudanças (também de cupom e "de"); a consulta descarta as
     # que não mudam o preço do gráfico.
@@ -65,6 +66,8 @@ export function mapDatabaseProducts(data: DatabaseRows): Product[] {
     product.coupon = row.cupom_codigo || null;
     product.couponDiscount = row.cupom_desconto_percentual == null ? null : Number(row.cupom_desconto_percentual);
     product.finalPrice = Number(row.preco_final);
+    // Veredito do bot, gravado pelo scraper: o painel exibe, não recalcula.
+    product.onSale = String(row.em_promocao) === 'true';
 
     product.history = closeAtLastVisit(
       historyByProduct.get(`${product.store}:${product.id}`) ?? [],
