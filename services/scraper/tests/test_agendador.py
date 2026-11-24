@@ -19,12 +19,14 @@ import pytest
 from application.conferencia import ReaproveitarSeNaoMudou
 from interfaces.agendador import (
     carregar_dotenv,
-    executar_rodada,
     inteiro_positivo,
-    limitar_produtos,
     minutos_positivos,
-    montar_coletor,
     montar_parser,
+)
+from interfaces.composicao import (
+    executar_rodada,
+    limitar_produtos,
+    montar_coletor,
     montar_publicador,
 )
 
