@@ -71,6 +71,8 @@ class OfertaRepositorioPostgres(OfertaRepositorio):
             cupom=(Cupom(row['cupom_codigo'], row['cupom_desconto_percentual'])
                    if row['cupom_codigo'] else None),
             em_promocao=row['em_promocao'],
+            base_desconto=row['base_desconto'],
+            desconto_percentual=row['desconto_percentual'],
         ))
 
     def buscar_preco_referencia(self, produto_id: str, loja: str):
@@ -101,17 +103,20 @@ class OfertaRepositorioPostgres(OfertaRepositorio):
             self.conexao.execute(
                 """INSERT INTO public.ofertas
                 (loja,produto_id,nome,url,preco_referencia,preco_atual,preco_de,
-                 preco_final,cupom_codigo,cupom_desconto_percentual,em_promocao)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                 preco_final,cupom_codigo,cupom_desconto_percentual,em_promocao,
+                 base_desconto,desconto_percentual)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (loja,produto_id) DO UPDATE SET
                 nome=EXCLUDED.nome,url=EXCLUDED.url,preco_atual=EXCLUDED.preco_atual,
                 preco_de=EXCLUDED.preco_de,preco_final=EXCLUDED.preco_final,
                 cupom_codigo=EXCLUDED.cupom_codigo,
                 cupom_desconto_percentual=EXCLUDED.cupom_desconto_percentual,
-                em_promocao=EXCLUDED.em_promocao,atualizada_em=clock_timestamp()""",
+                em_promocao=EXCLUDED.em_promocao,base_desconto=EXCLUDED.base_desconto,
+                desconto_percentual=EXCLUDED.desconto_percentual,atualizada_em=clock_timestamp()""",
                 (e.loja, e.produto_id, e.nome, e.url,
                  e.preco_referencia.valor, e.preco_atual.valor, preco_de,
-                 e.preco_final.valor, codigo, percentual, e.em_promocao),
+                 e.preco_final.valor, codigo, percentual, e.em_promocao,
+                 e.base_desconto, e.desconto_percentual),
             )
             # O histórico guarda mudanças, não coletas: uma linha nova só quando
             # preço, "de", preço final ou cupom diferem da última linha do produto.

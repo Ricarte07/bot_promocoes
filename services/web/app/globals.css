@@ -186,6 +186,12 @@ footer{margin-top:32px}
 .stale-label{color:var(--error);font-weight:600}
 .product-row.stale .product-name,.product-row.stale .product-price strong{color:var(--muted)}
 .promo-badge{font-size:12px;font-weight:600;white-space:nowrap}
+/* Origem do desconto: o "de" da loja sem conferência aparece contornado, não cheio. */
+.promo-badge strong{margin-right:6px}
+.promo-badge.unverified{background:transparent;color:var(--muted);border:1px dashed var(--muted);font-weight:500}
+.promo-badge.unverified strong{color:var(--ink)}
+.origin-breakdown{list-style:none;margin:0;padding:0;font-size:13px;line-height:1.6}
+.origin-breakdown strong{font-size:13px;font-weight:700;letter-spacing:0}
 /* Legibilidade: corpo de 16 px e nada abaixo de 12 px (a marca "MONITOR DE PREÇOS" é logotipo). */
 body{font-size:16px}
 .eyebrow,.badge,.stats small,.product-table thead th,.coupon-label small,.section-nav button span{font-size:12px}

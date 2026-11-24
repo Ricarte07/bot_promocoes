@@ -64,3 +64,25 @@ test('filtro "só promoções do bot" e preço do filtro igual ao do desconto', 
   assert.equal(filterProducts([comCupom], { ...EMPTY_FILTERS, minimum: '95' }, AGORA).length, 0);
   assert.deepEqual(sortByLowestPrice([produto({ produto_id: 'a', preco_final: '95' }), comCupom]).map((p) => p.finalPrice), [90, 95]);
 });
+
+test('origem e desconto aprovados pelo bot chegam ao painel e têm prioridade', async () => {
+  const { promotionDiscount, ORIGIN_LABELS } = await import('../lib/products/selectors.ts');
+  const p = produto({ base_desconto: 'menor_30_dias', desconto_percentual: '12.50', preco_de: '300' });
+  assert.equal(p.discountOrigin, 'menor_30_dias');
+  assert.equal(p.botDiscount, 12.5);
+  // O "de" de 300 daria 66,7% pela conta do painel; vale o que o bot aprovou.
+  assert.equal(promotionDiscount(p), 12.5);
+  assert.equal(ORIGIN_LABELS[p.discountOrigin], 'menor preço em 30 dias');
+  // Origem desconhecida ou ausente vira null, sem quebrar a tela.
+  assert.equal(produto({ base_desconto: 'outra' }).discountOrigin, null);
+  assert.equal(produto({ base_desconto: null }).botDiscount, null);
+});
+
+test('filtro por origem mostra só promoções válidas daquela origem', () => {
+  const queda = produto({ produto_id: '1', base_desconto: 'referencia' });
+  const deLoja = produto({ produto_id: '2', base_desconto: 'preco_de_loja' });
+  const deLojaVencida = produto({ produto_id: '3', base_desconto: 'preco_de_loja', atualizada_em: horasAtras(30) });
+  const lista = [queda, deLoja, deLojaVencida];
+  assert.deepEqual(filterProducts(lista, { ...EMPTY_FILTERS, show: 'preco_de_loja' }, AGORA).map((x) => x.id), ['2']);
+  assert.deepEqual(filterProducts(lista, { ...EMPTY_FILTERS, show: 'referencia' }, AGORA).map((x) => x.id), ['1']);
+});

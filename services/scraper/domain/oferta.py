@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Optional
 
 from domain.cupom import Cupom
@@ -34,6 +35,10 @@ class EstadoOferta:
     em_promocao: bool = False
     nome: str = ""
     url: str = ""
+    # A promoção aprovada pelas regras: de onde vem o desconto e quanto ele é.
+    # None quando a oferta não está em promoção.
+    base_desconto: Optional[str] = None
+    desconto_percentual: Optional[Decimal] = None
 
 
 class Oferta:
@@ -75,6 +80,10 @@ class Oferta:
         self.cupom: Optional[Cupom] = None
         self.preco_final = preco_referencia
         self.em_promocao = False
+        # Por que é promoção (referencia, menor_30_dias ou preco_de_loja) e o
+        # desconto sobre a base aprovada; None fora de promoção.
+        self.base_desconto: Optional[str] = None
+        self.desconto_percentual: Optional[Decimal] = None
         self._eventos: list[PromocaoDetectada] = []
 
     def registrar_preco(
@@ -96,6 +105,8 @@ class Oferta:
 
         promocao = self._melhor_promocao(historico or HistoricoRecente())
         self.em_promocao = promocao is not None
+        self.base_desconto = promocao.origem if promocao else None
+        self.desconto_percentual = promocao.desconto if promocao else None
         caiu = self.preco_final.valor < final_anterior.valor
 
         if promocao is not None and (not estava_em_promocao or caiu):
@@ -126,6 +137,8 @@ class Oferta:
             em_promocao=self.em_promocao,
             nome=self.nome,
             url=self.url,
+            base_desconto=self.base_desconto,
+            desconto_percentual=self.desconto_percentual,
         )
 
     @classmethod
@@ -142,6 +155,8 @@ class Oferta:
         oferta.preco_de = estado.preco_de
         oferta.cupom = estado.cupom
         oferta.em_promocao = estado.em_promocao
+        oferta.base_desconto = estado.base_desconto
+        oferta.desconto_percentual = estado.desconto_percentual
         return oferta
 
     def coletar_eventos(self) -> list[PromocaoDetectada]:

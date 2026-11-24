@@ -28,9 +28,13 @@ CREATE TABLE public.ofertas (
     cupom_codigo text CHECK (cupom_codigo <> ''),
     cupom_desconto_percentual numeric CHECK (cupom_desconto_percentual > 0 AND cupom_desconto_percentual < 100),
     em_promocao boolean NOT NULL,
+    -- A promoção aprovada pelas regras do bot: de onde vem o desconto e quanto ele é.
+    base_desconto text CHECK (base_desconto IN ('referencia', 'menor_30_dias', 'preco_de_loja')),
+    desconto_percentual numeric CHECK (desconto_percentual >= 0 AND desconto_percentual < 100),
     atualizada_em timestamptz NOT NULL DEFAULT clock_timestamp(),
     PRIMARY KEY (loja, produto_id),
-    CHECK (cupom_codigo IS NOT NULL OR cupom_desconto_percentual IS NULL)
+    CHECK (cupom_codigo IS NOT NULL OR cupom_desconto_percentual IS NULL),
+    CONSTRAINT ofertas_origem_so_em_promocao CHECK (base_desconto IS NULL OR em_promocao)
 );
 CREATE TABLE public.historico_precos (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
