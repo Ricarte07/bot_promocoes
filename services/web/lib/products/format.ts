@@ -8,6 +8,14 @@ export function formatMoney(value: number): string {
 
 export function formatDate(value: string): string {
   return new Date(value).toLocaleString('pt-BR', {
-    timeZone: 'America/Fortaleza',
+    timeZone: 'America/Sao_Paulo',
   });
+}
+
+// "há 12 min", "há 3 h", "há 2 dias". Recebe as horas já calculadas para que
+// servidor e navegador mostrem o mesmo texto (a base é a hora da leitura).
+export function formatSeenAgo(hours: number): string {
+  if (hours < 1) return `há ${Math.max(1, Math.round(hours * 60))} min`;
+  if (hours < 48) return `há ${Math.floor(hours)} h`;
+  return `há ${Math.floor(hours / 24)} dias`;
 }

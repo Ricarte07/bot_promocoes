@@ -22,9 +22,8 @@ export default function PriceHistory({ product }: { product: Product }) {
           <span aria-hidden="true">⌁</span>
           <h3>Ainda não há histórico disponível</h3>
           <p>
-            Os preços em memória não são compartilhados com esta interface. O
-            modo PostgreSQL existente registra cada coleta e permite consultar a
-            evolução aqui.
+            O histórico aparece quando o scraper grava no PostgreSQL. Ele guarda a
+            primeira coleta e cada mudança de preço, cupom ou preço &ldquo;de&rdquo;.
           </p>
         </div>
       ) : (
@@ -56,7 +55,7 @@ export default function PriceHistory({ product }: { product: Product }) {
               <figcaption>
                 {formatDate(points[0].date)} —{' '}
                 {formatDate(points[points.length - 1].date)} · Horário de
-                Fortaleza
+                Brasília
               </figcaption>
             </figure>
           ) : (
@@ -67,7 +66,7 @@ export default function PriceHistory({ product }: { product: Product }) {
           )}
           <div className="table-wrap">
             <table>
-              <caption>Primeira coleta, mudanças de preço e coleta mais recente (horário de Fortaleza)</caption>
+              <caption>Primeira coleta, mudanças de preço e coleta mais recente (horário de Brasília)</caption>
               <thead>
                 <tr>
                   <th>Data da coleta</th>
