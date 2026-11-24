@@ -1,4 +1,4 @@
-import type { Product } from '../catalog/types';
+import type { DiscountOrigin, Product } from '../catalog/types';
 
 // Campos de formulário usam texto: string vazia significa "sem filtro".
 export type ProductFilters = {
@@ -44,6 +44,23 @@ export function isPromotion(product: Product, now: number): boolean {
   return product.onSale === true && !isStale(product, now) && hoursSinceSeen(product, now) !== null;
 }
 
+// Como cada origem aparece na tela. A do "de" da loja diz com todas as letras que o
+// bot ainda não conferiu o preço riscado (menos de 7 dias de histórico).
+export const ORIGIN_LABELS: Record<DiscountOrigin, string> = {
+  referencia: 'queda vista pelo bot',
+  menor_30_dias: 'menor preço em 30 dias',
+  preco_de_loja: '"de" da loja, não conferido',
+};
+
+// Valores do filtro "Mostrar" que escolhem uma origem específica.
+export const ORIGIN_FILTERS: DiscountOrigin[] = ['referencia', 'menor_30_dias', 'preco_de_loja'];
+
+// O desconto que o bot aprovou; antes da primeira rodada com a origem gravada,
+// cai para o cálculo do painel sobre a maior base.
+export function promotionDiscount(product: Product): number | null {
+  return product.botDiscount ?? calculateDiscount(product);
+}
+
 // O que o comprador paga: com o cupom, quando a loja diz quanto ele desconta.
 export function effectivePrice(product: Product): number | null {
   return product.finalPrice ?? product.price;
@@ -82,6 +99,8 @@ export function filterProducts(
 
   return products.filter((product) => {
     if (filters.show === 'promocoes' && !isPromotion(product, now)) return false;
+    if (ORIGIN_FILTERS.includes(filters.show as DiscountOrigin) &&
+        (!isPromotion(product, now) || product.discountOrigin !== filters.show)) return false;
     if (filters.store && product.store !== filters.store) return false;
     if (!product.label.toLowerCase().includes(filters.search.toLowerCase()))
       return false;
@@ -125,7 +144,7 @@ export const SORT_LABELS: Record<SortOrder, string> = {
 export function sortProducts(products: Product[], order: SortOrder, now: number): Product[] {
   const value = (product: Product): number | string | null => {
     switch (order) {
-      case 'desconto': return calculateDiscount(product);
+      case 'desconto': return isPromotion(product, now) ? promotionDiscount(product) : calculateDiscount(product);
       case 'preco': return effectivePrice(product);
       case 'visto': return hoursSinceSeen(product, now);
       case 'nome': return product.label.toLocaleLowerCase('pt-BR');

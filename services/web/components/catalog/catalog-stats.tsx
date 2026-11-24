@@ -1,6 +1,6 @@
 import type { Product } from '../../lib/catalog/types';
 import { formatMoney } from '../../lib/products/format';
-import { effectivePrice, FRESH_HOURS, isPromotion, isStale } from '../../lib/products/selectors';
+import { effectivePrice, FRESH_HOURS, isPromotion, isStale, ORIGIN_FILTERS, ORIGIN_LABELS } from '../../lib/products/selectors';
 
 export default function CatalogStats({
   products,
@@ -14,7 +14,12 @@ export default function CatalogStats({
   now: number;
 }) {
   const stale = filtered.filter((p) => isStale(p, now)).length;
-  const promotions = filtered.filter((p) => isPromotion(p, now)).length;
+  const promotionList = filtered.filter((p) => isPromotion(p, now));
+  const promotions = promotionList.length;
+  // Quantas promoções há de cada origem: o "de" da loja não conferido pesa diferente.
+  const byOrigin = ORIGIN_FILTERS
+    .map((origin) => ({ origin, count: promotionList.filter((p) => p.discountOrigin === origin).length }))
+    .filter(({ count }) => count > 0);
   return (
     <div className="stats">
       <article>
@@ -43,6 +48,13 @@ export default function CatalogStats({
       <article>
         <span>Promoções do bot</span>
         <strong>{promotions.toString().padStart(2, '0')}</strong>
+        {byOrigin.length > 0 && (
+          <ul className="origin-breakdown">
+            {byOrigin.map(({ origin, count }) => (
+              <li key={origin}><strong>{count}</strong> {ORIGIN_LABELS[origin]}</li>
+            ))}
+          </ul>
+        )}
         <small>
           As mesmas regras do Telegram, vistas nas últimas {FRESH_HOURS} h. Na Kabum o
           desconto é sobre o preço no Pix.

@@ -1,5 +1,6 @@
 // Contratos compartilhados: descrevem os dados, sem acessar banco ou arquivos.
 export type Observation = { price: number; date: string };
+export type DiscountOrigin = 'referencia' | 'menor_30_dias' | 'preco_de_loja';
 export type Product = {
   id: string;
   store: string;
@@ -16,6 +17,10 @@ export type Product = {
   finalPrice?: number | null;
   // O veredito do bot (ofertas.em_promocao): as mesmas regras que decidem o Telegram.
   onSale?: boolean;
+  // Por que é promoção e quanto, segundo as regras do bot (ofertas.base_desconto e
+  // ofertas.desconto_percentual); null fora de promoção ou antes da primeira rodada.
+  discountOrigin?: DiscountOrigin | null;
+  botDiscount?: number | null;
 };
 export type Catalog = {
   products: Product[];

@@ -2,7 +2,9 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mapProduct } from './map-product';
 import type { Row } from './map-product';
-import type { Product } from './types';
+import type { DiscountOrigin, Product } from './types';
+
+const ORIGINS: DiscountOrigin[] = ['referencia', 'menor_30_dias', 'preco_de_loja'];
 
 // Reutiliza psycopg do scraper, somente para leitura. Não inicia uma coleta.
 const query =`
@@ -31,7 +33,7 @@ if host and not host.startswith('/') and host not in ('localhost','127.0.0.1',':
         raise ValueError('PostgreSQL remoto exige SSL')
     params.setdefault('sslmode','require')
 with psycopg.connect(**params,row_factory=dict_row,connect_timeout=5,prepare_threshold=None,options='-c default_transaction_read_only=on -c statement_timeout=8000') as c:
-    offers=c.execute('SELECT loja,produto_id,nome,url,preco_atual,preco_final,preco_de,preco_referencia,cupom_codigo,cupom_desconto_percentual,em_promocao,atualizada_em FROM public.ofertas ORDER BY loja,produto_id').fetchall()
+    offers=c.execute('SELECT loja,produto_id,nome,url,preco_atual,preco_final,preco_de,preco_referencia,cupom_codigo,cupom_desconto_percentual,em_promocao,base_desconto,desconto_percentual,atualizada_em FROM public.ofertas ORDER BY loja,produto_id').fetchall()
     # Só a primeira linha, cada mudança de preço e a mais recente de cada produto.
     # O scraper já grava só mudanças (também de cupom e "de"); a consulta descarta as
     # que não mudam o preço do gráfico.
@@ -68,6 +70,9 @@ export function mapDatabaseProducts(data: DatabaseRows): Product[] {
     product.finalPrice = Number(row.preco_final);
     // Veredito do bot, gravado pelo scraper: o painel exibe, não recalcula.
     product.onSale = String(row.em_promocao) === 'true';
+    product.discountOrigin = ORIGINS.includes(row.base_desconto as DiscountOrigin)
+      ? (row.base_desconto as DiscountOrigin) : null;
+    product.botDiscount = row.desconto_percentual == null ? null : Number(row.desconto_percentual);
 
     product.history = closeAtLastVisit(
       historyByProduct.get(`${product.store}:${product.id}`) ?? [],

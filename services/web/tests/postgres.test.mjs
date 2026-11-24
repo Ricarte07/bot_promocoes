@@ -162,6 +162,9 @@ with psycopg.connect(os.environ['DATABASE_URL']) as c:
     print(c.execute("SELECT count(*) FROM public.ofertas WHERE em_promocao AND atualizada_em > now() - interval '24 hours'").fetchone()[0])
 `).trim());
       assert.equal(depois[0].onSale, true);
+      // A origem e o desconto aprovados pelo bot chegam ao painel.
+      assert.equal(depois[0].discountOrigin, 'referencia');
+      assert.equal(depois[0].botDiscount, 20);
       assert.equal(noPainel, 1);
       assert.equal(noPainel, noBanco);
     } finally {
