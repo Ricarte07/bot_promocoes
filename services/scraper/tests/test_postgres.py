@@ -109,7 +109,7 @@ def test_rollback_oferta_historico_e_evento(banco):
 
 
 def test_fonte_categoria_e_produtos_descobertos_individuais(banco):
-    from interfaces.agendador import executar_rodada
+    from interfaces.composicao import executar_rodada
     with conectar(banco) as c:
         c.execute("INSERT INTO public.produtos_monitorados (loja,url,tipo,paginas) VALUES ('kabum','https://www.kabum.com.br/hardware','listagem',2)")
         fonte = FonteDeProdutosPostgres(c)
