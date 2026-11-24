@@ -239,3 +239,31 @@ def test_banco_recusa_origem_fora_de_promocao(banco):
         coletar(c, [item('100')])
         with pytest.raises(psycopg.errors.CheckViolation):
             c.execute("UPDATE public.ofertas SET base_desconto = 'referencia' WHERE NOT em_promocao")
+
+
+class ContaComandos:
+    """Conexão que conta os comandos enviados: cada um é uma ida e volta ao banco."""
+
+    def __init__(self, conexao):
+        self._conexao = conexao
+        self.comandos = 0
+
+    def execute(self, *args, **kwargs):
+        self.comandos += 1
+        return self._conexao.execute(*args, **kwargs)
+
+    def __getattr__(self, nome):
+        return getattr(self._conexao, nome)
+
+
+def test_cada_produto_custa_poucas_idas_ao_banco(banco):
+    # Com o banco remoto, cada ida e volta custa ~55 ms: o número de comandos por
+    # produto decide o tempo da rodada. Além do BEGIN e do COMMIT, são três: a trava,
+    # a leitura (oferta, referência e histórico juntos) e a gravação das três tabelas.
+    with conectar(banco) as c:
+        coletar(c, [item('100', produto_id=str(i)) for i in range(5)])
+        contada = ContaComandos(c)
+        assert coletar(contada, [item('80', produto_id=str(i)) for i in range(5)]) == 5
+        # 5 produtos × (trava + leitura + gravação) + 5 eventos na fila (caiu 20%).
+        assert contada.comandos == 5 * 3 + 5
+        assert c.execute('SELECT count(*) AS n FROM public.historico_precos').fetchone()['n'] == 10
