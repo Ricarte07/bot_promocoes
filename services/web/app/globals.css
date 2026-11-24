@@ -38,7 +38,7 @@ p{line-height:1.65}
 .section-nav button span{margin-left:8px;color:var(--green);font-size:11px}
 .notice{display:flex;gap:8px;flex-direction:column;border:1px solid var(--line);border-radius:9px;padding:16px 20px;background:var(--notice);font-size:12px;margin-bottom:24px;line-height:1.5}
 .notice span{color:var(--notice-ink)}
-.filters{display:grid;grid-template-columns:2fr 1.1fr 1fr 1fr 1fr auto;align-items:end;gap:12px}
+.filters{display:grid;grid-template-columns:2fr 1.2fr 1.1fr 1fr 1fr 1fr auto;align-items:end;gap:12px}
 label{display:flex;flex-direction:column;gap:8px;font-size:11px;font-weight:600}
 input,select{width:100%;min-width:0;border:1px solid var(--input-line);border-radius:7px;background:var(--surface);padding:11px 12px;color:var(--ink)}
 input::placeholder{color:var(--muted)}
@@ -84,16 +84,6 @@ figcaption,caption{font-size:12px;color:var(--muted);text-align:left;line-height
 table{border-collapse:collapse;width:100%;font-size:13px}
 td,th{text-align:left;padding:14px;border-bottom:1px solid var(--line)}
 .table-wrap{overflow:auto;max-height:400px}
-.opportunities{display:grid;grid-template-columns:1fr 1fr;gap:24px}
-.panel{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:30px}
-.panel h2{font-size:26px;letter-spacing:-.7px}
-.panel p{color:var(--muted)}
-.panel ol{padding-left:22px}
-.panel li{padding:16px 0;border-bottom:1px solid var(--line);line-height:1.5}
-.panel li strong{display:block;color:var(--green);margin-top:8px}
-.seasonal{background:var(--soft)}
-.seasonal h2{font-size:32px}
-.seasonal h3{font-size:15px}
 footer{display:flex;align-items:center;justify-content:space-between;gap:20px;border-top:1px solid var(--line);margin-top:60px;padding:28px 0;color:var(--muted);font-size:11px}
 footer .brand{font-size:20px}
 .skip{position:absolute;left:16px;top:-100px;background:var(--surface);padding:16px;z-index:10}
@@ -115,7 +105,6 @@ footer .brand{font-size:20px}
 .intro{align-items:flex-start;flex-direction:column}
 .stats{grid-template-columns:repeat(2,1fr);gap:10px}
 .product-grid{grid-template-columns:repeat(2,1fr)}
-.opportunities{grid-template-columns:1fr}
 .section-nav{margin-bottom:18px}
 .filters{grid-template-columns:1fr 1fr}
 .search{grid-column:1/-1}
@@ -193,3 +182,8 @@ h1{font-size:clamp(26px,3vw,36px);letter-spacing:-1px}
 footer{margin-top:32px}
 @media(max-width:900px){.header-inner{padding:18px 20px}.section-nav{order:3;width:100%;margin:0;justify-content:center}.section-nav button{flex:1}.header-actions{margin-left:auto}main{padding:24px 20px 0}.stats article{padding:16px}.product-name{min-width:240px}}
 @media(max-width:480px){.stats article{border-bottom:1px solid var(--line)}.stats article:nth-child(even){border-right:0}.stats strong{font-size:23px}.header-actions{gap:6px}.source{display:none}.filters{padding:14px}.brand-symbol{width:40px;height:40px}}
+/* Veredito do bot e frescor do dado (painel com dados honestos) */
+.seen{display:block;margin-top:6px;font-size:12px;color:var(--muted);white-space:nowrap}
+.stale-label{color:var(--error);font-weight:600}
+.product-row.stale .product-name,.product-row.stale .product-price strong{color:var(--muted)}
+.promo-badge{font-size:12px;font-weight:600;white-space:nowrap}

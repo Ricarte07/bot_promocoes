@@ -10,6 +10,7 @@ registerHooks({
   },
 });
 const { closeAtLastVisit, mapDatabaseProducts, readPostgresProducts } = await import('../lib/catalog/postgres-source.ts');
+const { isPromotion } = await import('../lib/products/selectors.ts');
 
 test('ofertas descobertas em categorias usam nome e ID coletados, sem depender dos endereços monitorados', () => {
   const [product] = mapDatabaseProducts({
@@ -98,8 +99,11 @@ print(json.dumps(dict(name=name,url=make_conninfo(url,dbname=name))))
 `;
     const database = JSON.parse(run(setup));
     const original = process.env.DATABASE_URL;
+    const originalPanel = process.env.PANEL_DATABASE_URL;
     try {
       process.env.DATABASE_URL = database.url;
+      // O usuário só-leitura do .env apontaria para outro banco.
+      delete process.env.PANEL_DATABASE_URL;
       run(`
 import os,sys
 from pathlib import Path
@@ -129,9 +133,41 @@ with conectar(os.environ['DATABASE_URL']) as c:
       assert.equal(products[0].couponDiscount, null);
       // Primeira coleta, a mudança para 90 e a coleta mais recente; a repetição de 100 sai.
       assert.deepEqual(products[0].history.map((p) => p.price), [100, 90, 90]);
+      // 10% abaixo da referência: o bot não chama de promoção, e o painel também não.
+      assert.equal(products[0].onSale, false);
+
+      // Cai para 80 (20%): o bot marca em_promocao, e o painel conta o mesmo que o banco.
+      run(`
+import os,sys
+from pathlib import Path
+from decimal import Decimal
+sys.path.insert(0,str(Path('../scraper').resolve()))
+from infrastructure.persistencia.postgres import conectar,OfertaRepositorioPostgres
+from infrastructure.mensageria.postgres import PublicadorPostgres
+from application.processar_coleta import ProcessarColeta
+from application.portas import PrecoColetado
+from domain.preco import Preco
+class Coletor:
+    def coletar(self):
+        return [PrecoColetado('999','kabum',Preco(Decimal('80')),'Descoberto na categoria','https://www.kabum.com.br/produto/999/exemplo')]
+with conectar(os.environ['DATABASE_URL']) as c:
+    ProcessarColeta(Coletor(),OfertaRepositorioPostgres(c),PublicadorPostgres(c)).executar()
+`);
+      const depois = await readPostgresProducts();
+      const agora = Date.now();
+      const noPainel = depois.filter((p) => isPromotion(p, agora)).length;
+      const noBanco = Number(run(`
+import os,psycopg
+with psycopg.connect(os.environ['DATABASE_URL']) as c:
+    print(c.execute("SELECT count(*) FROM public.ofertas WHERE em_promocao AND atualizada_em > now() - interval '24 hours'").fetchone()[0])
+`).trim());
+      assert.equal(depois[0].onSale, true);
+      assert.equal(noPainel, 1);
+      assert.equal(noPainel, noBanco);
     } finally {
       if (original === undefined) delete process.env.DATABASE_URL;
       else process.env.DATABASE_URL = original;
+      if (originalPanel !== undefined) process.env.PANEL_DATABASE_URL = originalPanel;
       run(`
 import os,psycopg
 from psycopg import sql
