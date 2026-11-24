@@ -111,3 +111,32 @@ export function sortByLowestPrice(products: Product[]): Product[] {
     .filter((product) => effectivePrice(product) !== null)
     .sort((first, second) => effectivePrice(first)! - effectivePrice(second)!);
 }
+
+export type SortOrder = 'desconto' | 'preco' | 'visto' | 'nome';
+
+export const SORT_LABELS: Record<SortOrder, string> = {
+  desconto: 'Maior desconto',
+  preco: 'Menor preço',
+  visto: 'Visto mais recentemente',
+  nome: 'Nome (A–Z)',
+};
+
+// Produto sem o dado da ordenação vai para o fim, em vez de ser escondido.
+export function sortProducts(products: Product[], order: SortOrder, now: number): Product[] {
+  const value = (product: Product): number | string | null => {
+    switch (order) {
+      case 'desconto': return calculateDiscount(product);
+      case 'preco': return effectivePrice(product);
+      case 'visto': return hoursSinceSeen(product, now);
+      case 'nome': return product.label.toLocaleLowerCase('pt-BR');
+    }
+  };
+  const direction = order === 'desconto' ? -1 : 1;
+  return [...products].sort((first, second) => {
+    const a = value(first);
+    const b = value(second);
+    if (a === null || b === null) return a === b ? 0 : a === null ? 1 : -1;
+    if (typeof a === 'string' && typeof b === 'string') return a.localeCompare(b, 'pt-BR') * direction;
+    return ((a as number) - (b as number)) * direction;
+  });
+}

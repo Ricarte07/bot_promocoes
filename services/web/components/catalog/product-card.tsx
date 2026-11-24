@@ -12,9 +12,9 @@ export default function ProductCard({ product, now, onShowHistory }: {
   const stale = isStale(product, now);
   const seen = hoursSinceSeen(product, now);
   return (
-    <tr className={stale ? 'product-row stale' : 'product-row'}>
-      <th scope="row" className="product-name">{product.label}</th>
-      <td>
+    <tr className={stale ? 'product-row stale' : 'product-row'} role="row">
+      <th scope="row" role="rowheader" className="product-name">{product.label}</th>
+      <td role="cell" data-label="Loja">
         <span className="store-label">{product.store}</span>
         {seen !== null && (
           <small className={stale ? 'seen stale-label' : 'seen'}>
@@ -22,24 +22,24 @@ export default function ProductCard({ product, now, onShowHistory }: {
           </small>
         )}
       </td>
-      <td className="product-price">
+      <td role="cell" data-label="Preço atual" className="product-price">
         <strong>{product.price != null ? formatMoney(product.price) : 'Indisponível'}</strong>
         {product.listPrice != null && product.price != null && product.listPrice > product.price &&
           <del>{formatMoney(product.listPrice)}</del>}
       </td>
-      <td>{product.coupon ? <span className="coupon-label">{product.coupon}
+      <td role="cell" data-label="Cupom">{product.coupon ? <span className="coupon-label">{product.coupon}
         {product.couponDiscount != null && product.finalPrice != null
           ? <small>{formatMoney(product.finalPrice)} com cupom</small>
           : <small>% não informado pela loja</small>}
       </span> : <span className="muted">—</span>}</td>
-      <td>
+      <td role="cell" data-label="Desconto">
         {promotion
           ? <span className="badge promo-badge">{discount != null ? `${discount.toFixed(1)}% · ` : ''}promoção do bot</span>
           : discount != null && discount > 0
             ? <span className="muted">{discount.toFixed(1)}%</span>
             : <span className="muted">—</span>}
       </td>
-      <td><div className="row-actions">
+      <td role="cell" className="actions-cell"><div className="row-actions">
         <button onClick={() => onShowHistory(product)} aria-label={`Ver histórico de ${product.label}`}>Histórico</button>
         <a href={product.url} target="_blank" rel="noopener noreferrer" aria-label={`Ver ${product.label} na loja (nova aba)`}>Ver loja ↗</a>
       </div></td>
