@@ -253,3 +253,30 @@ def test_repositorio_em_memoria_devolve_oferta_nova_a_cada_busca():
 
     assert repositorio.buscar("1", "kabum").preco_atual.valor == Decimal("900")
     assert repositorio.buscar("1", "kabum") is not repositorio.buscar("1", "kabum")
+
+
+# --- Origem do desconto guardada na oferta -----------------------------------
+
+
+def test_oferta_guarda_de_onde_vem_o_desconto_e_limpa_ao_sair_da_promocao():
+    oferta = Oferta("1", "kabum", Preco(Decimal("1000")))
+    assert (oferta.base_desconto, oferta.desconto_percentual) == (None, None)
+
+    oferta.registrar_preco(Preco(Decimal("800")))  # queda vista pelo próprio bot
+    assert oferta.base_desconto == "referencia"
+    assert oferta.desconto_percentual == Decimal("20.00")
+
+    oferta.registrar_preco(Preco(Decimal("990")))  # 1%: saiu da promoção
+    assert (oferta.em_promocao, oferta.base_desconto, oferta.desconto_percentual) == (False, None, None)
+
+
+def test_origem_e_desconto_entram_na_foto_da_oferta():
+    oferta = Oferta("1", "kabum", Preco(Decimal("1000")))
+    oferta.registrar_preco(Preco(Decimal("700")), preco_de=Preco(Decimal("1500")))
+
+    restaurada = Oferta.restaurar(oferta.estado())
+
+    # O "de" de 1500 dá o maior desconto (53,33%) e, sem histórico, vale como "informado pela loja".
+    assert restaurada.base_desconto == "preco_de_loja"
+    assert restaurada.desconto_percentual == Decimal("53.33")
+    assert restaurada.estado() == oferta.estado()

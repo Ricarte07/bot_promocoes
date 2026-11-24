@@ -1,5 +1,7 @@
 import type { Product } from '../../lib/catalog/types';
-import { SORT_LABELS, type ProductFilters as ProductFiltersValue, type SortOrder } from '../../lib/products/selectors';
+import {
+  ORIGIN_FILTERS, ORIGIN_LABELS, SORT_LABELS, type ProductFilters as ProductFiltersValue, type SortOrder,
+} from '../../lib/products/selectors';
 
 export default function ProductFilters({
   products,
@@ -37,6 +39,9 @@ export default function ProductFilters({
         <select value={show} onChange={(e) => onChange('show', e.target.value)}>
           <option value="">Todos os produtos</option>
           <option value="promocoes">Só promoções do bot</option>
+          {ORIGIN_FILTERS.map((origin) => (
+            <option key={origin} value={origin}>Promoções: {ORIGIN_LABELS[origin]}</option>
+          ))}
         </select>
       </label>
       <label>

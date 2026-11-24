@@ -219,3 +219,23 @@ def test_preco_parado_ha_mais_de_30_dias_continua_sendo_o_menor_da_janela(banco)
         coletar(c, [item('3499.99')])
         historico = OfertaRepositorioPostgres(c).historico_recente('descoberto', 'kabum')
         assert historico.menor_preco_30_dias.valor == Decimal('3199.99')
+
+
+def test_origem_e_desconto_da_promocao_ficam_gravados_na_oferta(banco):
+    with conectar(banco) as c:
+        ler = lambda: c.execute('SELECT em_promocao, base_desconto, desconto_percentual FROM public.ofertas').fetchone()
+        coletar(c, [item('100')])
+        assert ler() == {'em_promocao': False, 'base_desconto': None, 'desconto_percentual': None}
+        coletar(c, [item('80')])
+        assert ler() == {'em_promocao': True, 'base_desconto': 'referencia', 'desconto_percentual': Decimal('20.00')}
+        # Reiniciar não perde a origem: ela volta com a oferta.
+        assert OfertaRepositorioPostgres(c).buscar('descoberto', 'kabum').base_desconto == 'referencia'
+        coletar(c, [item('99')])
+        assert ler() == {'em_promocao': False, 'base_desconto': None, 'desconto_percentual': None}
+
+
+def test_banco_recusa_origem_fora_de_promocao(banco):
+    with conectar(banco) as c:
+        coletar(c, [item('100')])
+        with pytest.raises(psycopg.errors.CheckViolation):
+            c.execute("UPDATE public.ofertas SET base_desconto = 'referencia' WHERE NOT em_promocao")
