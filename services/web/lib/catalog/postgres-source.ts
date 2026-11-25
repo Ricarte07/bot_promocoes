@@ -32,7 +32,8 @@ if host and not host.startswith('/') and host not in ('localhost','127.0.0.1',':
     if params.get('sslmode','require') not in ('require','verify-ca','verify-full'):
         raise ValueError('PostgreSQL remoto exige SSL')
     params.setdefault('sslmode','require')
-with psycopg.connect(**params,row_factory=dict_row,connect_timeout=5,prepare_threshold=None,options='-c default_transaction_read_only=on -c statement_timeout=8000') as c:
+# keepalive: uma conexão derrubada em silêncio pelo servidor cai com erro em vez de travar a página.
+with psycopg.connect(**params,row_factory=dict_row,connect_timeout=5,prepare_threshold=None,keepalives=1,keepalives_idle=30,keepalives_interval=10,keepalives_count=3,options='-c default_transaction_read_only=on -c statement_timeout=8000') as c:
     offers=c.execute('SELECT loja,produto_id,nome,url,preco_atual,preco_final,preco_de,preco_referencia,cupom_codigo,cupom_desconto_percentual,em_promocao,base_desconto,desconto_percentual,atualizada_em FROM public.ofertas ORDER BY loja,produto_id').fetchall()
     # Só a primeira linha, cada mudança de preço e a mais recente de cada produto.
     # O scraper já grava só mudanças (também de cupom e "de"); a consulta descarta as
