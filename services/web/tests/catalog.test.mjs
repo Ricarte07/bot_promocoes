@@ -8,7 +8,8 @@ import { registerHooks } from 'node:module';
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier)) return nextResolve(`${specifier}.ts`, context);
+    // Só o código do projeto usa imports sem extensão para arquivos .ts; os pacotes em node_modules ficam como estão.
+    if (specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier) && !context.parentURL?.includes('/node_modules/')) return nextResolve(`${specifier}.ts`, context);
     return nextResolve(specifier, context);
   },
 });
@@ -20,6 +21,7 @@ test('catalog reads real URLs and handles missing or invalid data without fabric
     CATALOG_SOURCE: process.env.CATALOG_SOURCE,
     PRODUCTS_FILE: process.env.PRODUCTS_FILE,
     SCRAPER_PYTHON: process.env.SCRAPER_PYTHON,
+    PANEL_DATABASE_URL: process.env.PANEL_DATABASE_URL,
   };
   const dir = await mkdtemp(path.join(tmpdir(), 'radar-test-'));
   try {
@@ -54,7 +56,8 @@ test('catalog reads real URLs and handles missing or invalid data without fabric
     assert.equal((await getCatalog()).error, true);
     process.env.CATALOG_SOURCE = 'postgres';
     process.env.DATABASE_URL = 'postgresql://secret:secret@unavailable/test';
-    process.env.SCRAPER_PYTHON = path.join(dir, 'missing-python');
+    // Vazio (e não apagado): senão o painel leria o usuário só-leitura do .env da raiz.
+    process.env.PANEL_DATABASE_URL = '';
     const failure = await getCatalog();
     assert.equal(failure.source, 'postgres');
     assert.equal(failure.error, true);

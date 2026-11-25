@@ -21,14 +21,15 @@ A memória do processo Python não é acessível ao Next.js. Por isso o modo JSO
 
 O scraper agora grava as tabelas de `sql/schema.sql`; siga `docs/banco.md` antes de selecionar PostgreSQL. O painel só consulta, sem criar tabelas nem executar coletas. O `.env` da raiz também é carregado, preservando valores já definidos pelo ambiente ou por `services/web/.env.local`. `CATALOG_SOURCE=postgres` seleciona o banco explicitamente.
 
-O servidor Next.js utiliza um subprocesso Python com a dependência `psycopg`, que precisa estar instalada no ambiente Python. Configure no ambiente do servidor (ou em `services/web/.env.local`):
+O servidor Next.js lê o banco direto, com o driver `pg` do Node: não precisa de Python, e por isso roda na Vercel (veja `docs/deploy-vercel.md`). Configure no ambiente do servidor (ou em `services/web/.env.local`):
 
 ```dotenv
-DATABASE_URL=postgresql://USUARIO:SENHA_CODIFICADA@HOST:5432/BANCO?sslmode=require
-SCRAPER_PYTHON=/caminho/absoluto/para/venv/bin/python
+CATALOG_SOURCE=postgres
+# Usuário só-leitura do painel (sql/003_painel_somente_leitura.sql). Sem ela, usa DATABASE_URL.
+PANEL_DATABASE_URL=postgresql://painel_leitura.ID_DO_PROJETO:SENHA@HOST:5432/postgres?sslmode=require
 ```
 
-`SCRAPER_PYTHON` é opcional, com padrão `python3`. A consulta é somente leitura, com timeout, e credenciais nunca são enviadas ao navegador. Requer hospedagem Node com Python instalado; exportação estática e ambientes Edge não são suportados. O catálogo parte de `ofertas` e usa o identificador persistido pelo coletor, incluindo os produtos descobertos em categorias e outras lojas.
+A conexão segue as mesmas regras do scraper: banco remoto só com SSL, sessão só-leitura, tempo limite e keepalive. Credenciais nunca são enviadas ao navegador. Exportação estática não é suportada (a página lê o banco a cada acesso). O catálogo parte de `ofertas` e usa o identificador persistido pelo coletor, incluindo os produtos descobertos em categorias e outras lojas.
 
 ## Comportamento
 
@@ -52,7 +53,7 @@ Verificação manual: combinar filtros, limpar, abrir histórico sem registros, 
 
 Teste da fonte de dados (Node 24): `node --experimental-strip-types --test tests/*.test.mjs`.
 
-Para incluir a leitura de um PostgreSQL real, use TEST_DATABASE_URL e SCRAPER_PYTHON conforme `docs/banco.md`. O banco descartável de teste não envia notificações.
+Para incluir a leitura de um PostgreSQL real, use TEST_DATABASE_URL e SCRAPER_PYTHON (o teste grava pelo scraper em Python) conforme `docs/banco.md`. O banco descartável de teste não envia notificações.
 
 ## Como o código está organizado
 

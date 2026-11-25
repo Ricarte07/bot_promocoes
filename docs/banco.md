@@ -132,7 +132,7 @@ Documentação: [conexões](https://supabase.com/docs/guides/database/connecting
 | `REDIS_URL` | Obrigatória com transporte Redis; também usada pelo notifier. |
 | `PANEL_DATABASE_URL` | Opcional, recomendada: conexão só-leitura da web (veja "Usuário só-leitura do painel"). Sem ela, a web usa a `DATABASE_URL`. |
 | `CATALOG_SOURCE` | `postgres` ou `json`. Sem valor, a web escolhe PostgreSQL se houver `DATABASE_URL`. |
-| `SCRAPER_PYTHON` | Interpretador usado pela web; precisa ter psycopg. Padrão `python3`. |
+| `SCRAPER_PYTHON` | Só os testes da web: o Python do scraper, usado para gravar dados de teste. O painel em si lê o banco pelo driver `pg`. |
 | `PRODUCTS_FILE` | Caminho opcional do JSON da web. O scraper usa `--produtos`. |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Só o notifier; desnecessários para testar armazenamento. |
 | `TEST_DATABASE_URL` | Só testes: banco separado com nome terminado em `_test` e usuário com CREATEDB. |
