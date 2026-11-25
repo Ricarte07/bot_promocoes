@@ -10,7 +10,8 @@ registerHooks({
   },
 });
 const { stepPath, lowestLineY, CHART } = await import('../lib/products/chart.ts');
-const { sortProducts } = await import('../lib/products/selectors.ts');
+const { matchesSearch, sortProducts } = await import('../lib/products/selectors.ts');
+const { formatTime } = await import('../lib/products/format.ts');
 
 const ponto = (price, date) => ({ price, date });
 
@@ -40,4 +41,20 @@ test('ordenação: maior desconto primeiro, e produto sem o dado vai para o fim'
   assert.deepEqual(sortProducts(precos, 'preco', 0).map((x) => x.id), ['barato', 'caro', 'sem']);
   // Não altera a lista original.
   assert.equal(lista[0].id, 'sem-base');
+});
+
+test('hora dos dados sai no horário de Brasília', () => {
+  // 18:30 em UTC é 15:30 em Brasília.
+  assert.equal(formatTime('2026-11-25T18:30:00Z'), '15:30');
+  assert.equal(formatTime('2026-11-25T03:05:00Z'), '00:05');
+});
+
+test('busca ignora acentos, maiúsculas, hífen e a ordem das palavras', () => {
+  const nome = 'Placa Mãe ASUS X870 MAX GAMING WIFI7, AMD, AM5, ATX, DDR5';
+  for (const busca of ['Placa Mae', 'placa mãe', 'PLACA-MAE', 'x870 asus', 'asus placa max', 'ddr5', '  ', ''])
+    assert.ok(matchesSearch(nome, busca), `deveria achar com "${busca}"`);
+  assert.ok(matchesSearch('Placa-Mãe ASUS TUF GAMING X870-PLUS', 'placa mae x870 plus'));
+  // Todas as palavras precisam estar no nome.
+  assert.ok(!matchesSearch(nome, 'placa mae gigabyte'));
+  assert.ok(!matchesSearch(nome, 'rtx'));
 });

@@ -12,6 +12,13 @@ export function formatDate(value: string): string {
   });
 }
 
+// "15:30": hora em que os dados foram lidos, no horário de Brasília.
+export function formatTime(value: string): string {
+  return new Date(value).toLocaleTimeString('pt-BR', {
+    timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit',
+  });
+}
+
 // "24/11": eixo do gráfico, no horário de Brasília.
 export function formatShortDate(value: string): string {
   return new Date(value).toLocaleDateString('pt-BR', {

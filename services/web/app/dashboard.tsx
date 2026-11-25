@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Brand from './brand';
 import ThemeToggle from './theme-toggle';
+import { useRelogio } from './use-relogio';
+import { formatTime } from '../lib/products/format';
 import type { Catalog, Product } from '../lib/catalog/types';
 import ProductCard from '../components/catalog/product-card';
 import PriceHistory from '../components/catalog/price-history';
@@ -24,6 +26,9 @@ import {
 const INITIAL_FILTERS: Filters = { ...EMPTY_FILTERS, show: 'promocoes' };
 // Quantas linhas aparecem de cada vez: o catálogo inteiro passa de 800 produtos.
 const PAGE_SIZE = 50;
+// Com a página aberta, os dados são relidos do banco depois deste tempo. O bot grava
+// a cada rodada (~10 min), então 5 min mantém a tela no máximo uma rodada atrás.
+const ATUALIZAR_A_CADA_MS = 5 * 60_000;
 export default function Dashboard({ catalog }: { catalog: Catalog }) {
   const [section, setSection] = useState('Produtos');
   const [filters, setFilters] = useState<Filters>(INITIAL_FILTERS);
@@ -51,8 +56,10 @@ export default function Dashboard({ catalog }: { catalog: Catalog }) {
   }
 
   const products = catalog.products;
-  // Base fixa para "visto há X" e para o corte de 24 h: a hora em que o servidor leu os dados.
-  const now = Date.parse(catalog.loadedAt);
+  // Relógio para "visto há X" e para o corte de 24 h: começa na hora em que o servidor
+  // leu os dados e anda enquanto a página está aberta.
+  const loadedAt = Date.parse(catalog.loadedAt);
+  const now = useRelogio(loadedAt);
   const invalidRange = hasInvalidPriceRange(filters);
   const filtered = sortProducts(filterProducts(products, filters, now), order, now);
   const visible = filtered.slice(0, limit);
@@ -65,6 +72,24 @@ export default function Dashboard({ catalog }: { catalog: Catalog }) {
     if (product) setSelected(`${product.store}:${product.id}`);
   }
   const refresh = () => startTransition(() => router.refresh());
+
+  // Relê os dados sozinho quando passam de 5 min, mas só com a aba à vista: uma aba
+  // esquecida em segundo plano não fica consultando o banco. Ao voltar para a aba,
+  // se os dados estiverem velhos, atualiza na hora. Filtros e seleção continuam.
+  useEffect(() => {
+    if (pending) return;
+    const talvezAtualizar = () => {
+      if (document.visibilityState === 'visible' && Date.now() - loadedAt >= ATUALIZAR_A_CADA_MS) {
+        startTransition(() => router.refresh());
+      }
+    };
+    const id = setInterval(talvezAtualizar, 30_000);
+    document.addEventListener('visibilitychange', talvezAtualizar);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', talvezAtualizar);
+    };
+  }, [loadedAt, pending, router]);
   return (
     <>
       <a href="#content" className="skip">
@@ -100,9 +125,16 @@ export default function Dashboard({ catalog }: { catalog: Catalog }) {
               Acompanhe cada preço<span>.</span>
             </h1>
           </div>
-          <button className="refresh" onClick={refresh} disabled={pending}>
-            {pending ? 'Atualizando…' : '↻ Atualizar dados'}
-          </button>
+          <div className="refresh-area">
+            <button className="refresh" onClick={refresh} disabled={pending}>
+              {pending ? 'Atualizando…' : '↻ Atualizar dados'}
+            </button>
+            <small className="data-time" role="status">
+              {pending
+                ? 'Buscando os dados mais recentes…'
+                : `Dados de ${formatTime(catalog.loadedAt)} · atualiza sozinho a cada 5 min`}
+            </small>
+          </div>
         </div>
         <CatalogStats products={products} filtered={filtered} priced={priced} now={now} />
         {catalog.error ? (
