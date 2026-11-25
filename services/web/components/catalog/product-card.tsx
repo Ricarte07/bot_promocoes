@@ -28,7 +28,7 @@ export default function ProductCard({ product, now, onShowHistory }: {
       <td role="cell" data-label="Preço atual" className="product-price">
         <strong>{product.price != null ? formatMoney(product.price) : 'Indisponível'}</strong>
         {product.listPrice != null && product.price != null && product.listPrice > product.price &&
-          <del>{formatMoney(product.listPrice)}</del>}
+          <span className="list-price">de <del>{formatMoney(product.listPrice)}</del></span>}
       </td>
       <td role="cell" data-label="Cupom">{product.coupon ? <span className="coupon-label">{product.coupon}
         {product.couponDiscount != null && product.finalPrice != null

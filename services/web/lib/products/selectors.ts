@@ -82,6 +82,26 @@ export function calculateDiscount(product: Product): number | null {
   return Math.max(0, (1 - price / base) * 100);
 }
 
+// Texto para comparação: sem acento, em minúsculas e com pontuação virando espaço.
+// Assim "Placa Mae", "placa mãe" e "Placa-Mãe" são a mesma coisa.
+export function normalizeText(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+// A busca acha o produto quando todas as palavras digitadas aparecem no nome, em
+// qualquer ordem e mesmo como parte de uma palavra maior ("x870 asus", "placa mae rog").
+export function matchesSearch(label: string, search: string): boolean {
+  const words = normalizeText(search).split(' ').filter(Boolean);
+  if (!words.length) return true;
+  const name = normalizeText(label);
+  return words.every((word) => name.includes(word));
+}
+
 export function hasInvalidPriceRange(filters: ProductFilters): boolean {
   return (
     filters.minimum !== '' &&
@@ -102,8 +122,7 @@ export function filterProducts(
     if (ORIGIN_FILTERS.includes(filters.show as DiscountOrigin) &&
         (!isPromotion(product, now) || product.discountOrigin !== filters.show)) return false;
     if (filters.store && product.store !== filters.store) return false;
-    if (!product.label.toLowerCase().includes(filters.search.toLowerCase()))
-      return false;
+    if (!matchesSearch(product.label, filters.search)) return false;
 
     // Preço ausente não pode passar por um filtro que exige preço. O filtro usa
     // o mesmo preço do desconto: o que o comprador paga.
