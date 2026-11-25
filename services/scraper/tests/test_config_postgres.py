@@ -43,3 +43,15 @@ def test_falha_de_conexao_nao_expoe_credenciais(monkeypatch):
 def test_conexao_remota_exige_ssl():
     with pytest.raises(ValueError, match='sslmode'):
         conectar('postgresql://usuario:senha@db.exemplo.com/postgres?sslmode=disable')
+
+
+def test_conexao_liga_o_keepalive(monkeypatch):
+    # Sem keepalive, uma conexão derrubada em silêncio pelo servidor deixa o bot
+    # esperando para sempre (aconteceu em 24/11: 10 horas sem gravar nada).
+    import psycopg
+    recebido = {}
+    monkeypatch.setattr(psycopg, 'connect', lambda **opcoes: recebido.update(opcoes))
+    conectar('postgresql://usuario:senha@db.exemplo.com/postgres?sslmode=require')
+    assert recebido['keepalives'] == 1
+    assert recebido['keepalives_idle'] <= 60
+    assert recebido['keepalives_interval'] <= 30
