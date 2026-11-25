@@ -14,6 +14,15 @@ from domain.regras_promocao import HistoricoRecente
 from domain.repositorios import OfertaRepositorio
 
 
+# Sem isto, uma conexão que o servidor derruba em silêncio (o pooler do Supabase,
+# a rede, o Wi-Fi do notebook) continua "aberta" para o cliente, e o bot fica
+# esperando uma resposta que nunca vem: em 24/11 ele ficou 10 horas parado assim.
+# Com o keepalive, o sistema testa a conexão depois de 30 s sem tráfego e, sem
+# resposta, ela cai com erro em ~2 min. Aí a rodada falha e a próxima reconecta
+# (ConexaoSobDemanda, em interfaces/composicao.py).
+KEEPALIVE = {"keepalives": 1, "keepalives_idle": 30, "keepalives_interval": 10, "keepalives_count": 3}
+
+
 def conectar(database_url: str):
     if not database_url:
         raise ValueError("PostgreSQL selecionado: defina DATABASE_URL no .env ou ambiente")
@@ -28,6 +37,7 @@ def conectar(database_url: str):
             **parametros, autocommit=True, row_factory=dict_row,
             connect_timeout=10, prepare_threshold=None,
             options="-c statement_timeout=15000 -c lock_timeout=10000",
+            **KEEPALIVE,
         )
     except psycopg.Error:
         # Não imprimir DSN/senha, inclusive quando a URL for inválida.
