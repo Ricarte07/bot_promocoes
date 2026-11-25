@@ -12,13 +12,14 @@ e quem escolhe é a `DATABASE_URL` do `.env`.
 
 | Banco | Onde | Para quê | Eventos |
 | --- | --- | --- | --- |
-| **Oficial** | Postgres no Docker, no notebook da empresa | O bot "de verdade", ligado ao Telegram | `redis` |
-| **Testes compartilhados** | Supabase | Experimentos com dados reais entre a equipe | sempre `console` |
-| **Testes automáticos** | Banco descartável (`TEST_DATABASE_URL`) | `pytest` e testes da web; o CI usa um container próprio | — |
+| **Oficial** | Supabase (projeto "Promo Bufos", São Paulo), desde 24/11/2026 | O bot "de verdade", ligado ao Telegram, e o painel publicado | `redis` |
+| **Local** | Postgres no Docker, no notebook | Base dos testes automáticos e cópia de reserva de antes da migração | `console` |
+| **Testes automáticos** | Bancos descartáveis criados a partir do local (`TEST_DATABASE_URL`) | `pytest` e testes da web; o CI usa um container próprio | — |
 
-**Regra:** só o banco oficial roda com `--eventos redis` (que leva ao Telegram).
-Cada banco tem a própria memória; dois bancos ligados ao Telegram mandariam a mesma
-promoção duas vezes.
+**Regra:** só um bot grava no banco oficial e só ele roda com `--eventos redis` (que
+leva ao Telegram). Cada banco tem a própria memória; dois bots ligados ao Telegram
+mandariam a mesma promoção duas vezes. O painel publicado lê o oficial com um usuário
+só-leitura (veja "Usuário só-leitura do painel").
 
 ## Configuração inicial
 
@@ -40,11 +41,12 @@ Se o `.env` já existe, edite-o preservando os valores atuais; não execute `cp`
 cima. O arquivo é ignorado pelo Git. Nunca use o prefixo `NEXT_PUBLIC_` para
 credenciais. Todas as variáveis estão explicadas no [`.env.example`](../.env.example).
 
-## Banco oficial (Docker)
+## Postgres local (Docker)
 
 1. No `.env`, defina `POSTGRES_PASSWORD` e use a mesma senha na `DATABASE_URL`
    (`postgresql://promo:SENHA@127.0.0.1:5432/promo`).
-2. Suba o banco (e o Redis, se for usar o Telegram):
+2. Suba o banco (e o Redis, se for usar o Telegram). O `iniciar-bot.ps1`, na raiz,
+   já sobe o Redis e o bot de uma vez:
 
    ```bash
    docker compose up -d postgres redis
@@ -65,7 +67,7 @@ Use `127.0.0.1`, e não `localhost`, nas URLs do banco e do Redis. No Windows,
 tentativa não é recusada, fica esperando, e cada conexão atrasa de 5 a 10 segundos
 (ou trava, quando não há timeout).
 
-**Recriar do zero** (apaga todos os dados e o histórico do banco oficial):
+**Recriar do zero** (apaga todos os dados e o histórico do banco local):
 
 ```bash
 docker compose down -v
@@ -75,7 +77,7 @@ docker compose up -d postgres
 Mudanças futuras no `sql/schema.sql` **não** são reaplicadas num volume que já
 existe: precisam de uma migração (um `ALTER TABLE` rodado à parte) ou da recriação acima.
 
-## Supabase (testes compartilhados)
+## Supabase (banco oficial)
 
 1. No painel do Supabase, confira o nome e o identificador do projeto correto.
 2. Em **Connect**, copie a conexão **Session pooler**, porta 5432. É a opção
@@ -87,10 +89,13 @@ existe: precisam de uma migração (um `ALTER TABLE` rodado à parte) ou da recr
    validar também o certificado, use `sslmode=verify-full&sslrootcert=/caminho/certificado.crt`.
 4. Com Transaction pooler (6543), os prepared statements automáticos já estão
    desabilitados nos clientes Python; a transação é por produto.
-5. Rode sempre com `--eventos console`.
+5. Só o bot oficial roda com `--eventos redis`; testes e experimentos contra o
+   Supabase usam `--eventos console`.
 
-O plano gratuito pausa o projeto após 7 dias sem atividade e tem limite de espaço:
-confira o uso em **Usage** no painel.
+O plano gratuito pausa o projeto após 7 dias sem atividade (o bot grava a cada
+rodada, então isso não acontece com ele ligado) e tem limite de espaço: confira o
+uso em **Usage** no painel. Como o banco está a ~55 ms de distância, cada ida e volta
+pesa no tempo da rodada; por isso o repositório junta as consultas (5 por produto).
 
 ### Criar as tabelas no Supabase sem sobrescrever nada
 
@@ -120,11 +125,23 @@ Documentação: [conexões](https://supabase.com/docs/guides/database/connecting
 [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security),
 [pausa por inatividade](https://supabase.com/docs/guides/platform/free-project-pausing).
 
+## Migrações
+
+Bancos criados com um `sql/schema.sql` antigo recebem as mudanças por estes scripts,
+na ordem, cada um uma vez. O `schema.sql` atual já inclui todos eles.
+
+| Script | O que faz | No Supabase oficial |
+| --- | --- | --- |
+| `sql/001_ofertas_ativas.sql` | Tabela `referencias_precos` (oferta sai quando acaba o estoque) | não precisou: o banco foi criado com um `schema.sql` que já a incluía |
+| `sql/002_historico_so_mudancas.sql` | Apaga linhas repetidas do histórico (opcional) | não precisou: o banco foi criado já sem repetições |
+| `sql/003_painel_somente_leitura.sql` | Usuário `painel_leitura` para o painel | aplicado (senha definida no SQL Editor) |
+| `sql/004_origem_do_desconto.sql` | Colunas `base_desconto` e `desconto_percentual` | aplicado |
+
 ## Variáveis
 
 | Variável | Uso |
 | --- | --- |
-| `POSTGRES_USER`, `POSTGRES_DB`, `POSTGRES_PASSWORD` | Usados pelo `docker compose` para criar o banco oficial. |
+| `POSTGRES_USER`, `POSTGRES_DB`, `POSTGRES_PASSWORD` | Usados pelo `docker compose` para criar o banco local. |
 | `DATABASE_URL` | Conexão privada do PostgreSQL, compartilhada por scraper e web. |
 | `PERSISTENCIA` | `postgres` (padrão) guarda estado e histórico; `memoria` é explicitamente temporário. |
 | `FONTE_PRODUTOS` | `json` (padrão) lê `produtos.json`; `postgres` lê endereços ativos de `produtos_monitorados`. |
@@ -253,7 +270,7 @@ pytest -q
 Cada teste cria um banco de nome aleatório, aplica o SQL e remove **só esse banco**
 no final; nenhuma tabela do banco oficial é tocada. O usuário precisa de CREATEDB e,
 para o teste de permissões, CREATEROLE (o usuário do container tem os dois). Nunca
-aponte `TEST_DATABASE_URL` para o banco oficial nem para o Supabase.
+aponte `TEST_DATABASE_URL` para o banco oficial (o Supabase).
 
 Na pasta `services/web`, com o mesmo `TEST_DATABASE_URL`:
 
