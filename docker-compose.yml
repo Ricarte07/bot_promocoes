@@ -2,6 +2,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: promo-redis
+    # Volta sozinho quando o Docker Desktop abre (depois de reiniciar o notebook, por exemplo).
+    restart: unless-stopped
     ports:
       - "127.0.0.1:6379:6379"
     # Persiste o stream em disco para sobreviver a um restart do container.
@@ -14,10 +16,12 @@ services:
       timeout: 3s
       retries: 5
 
-  # Banco oficial do bot (ver docs/banco.md). O Supabase fica para testes compartilhados.
+  # Banco local: os testes automáticos usam ele, e ele guarda a cópia de antes da
+  # migração. O banco oficial do bot agora é o Supabase (ver docs/banco.md).
   postgres:
     image: postgres:16
     container_name: promo-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-promo}
       POSTGRES_DB: ${POSTGRES_DB:-promo}
