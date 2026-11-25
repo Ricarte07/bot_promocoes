@@ -5,11 +5,12 @@ import { execFileSync } from 'node:child_process';
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier)) return nextResolve(`${specifier}.ts`, context);
+    // Só o código do projeto usa imports sem extensão para arquivos .ts; os pacotes em node_modules ficam como estão.
+    if (specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier) && !context.parentURL?.includes('/node_modules/')) return nextResolve(`${specifier}.ts`, context);
     return nextResolve(specifier, context);
   },
 });
-const { closeAtLastVisit, mapDatabaseProducts, readPostgresProducts } = await import('../lib/catalog/postgres-source.ts');
+const { closeAtLastVisit, connectionConfig, mapDatabaseProducts, readPostgresProducts } = await import('../lib/catalog/postgres-source.ts');
 const { isPromotion } = await import('../lib/products/selectors.ts');
 
 test('ofertas descobertas em categorias usam nome e ID coletados, sem depender dos endereços monitorados', () => {
@@ -70,6 +71,17 @@ test('sem visita mais nova que a última mudança, o histórico fica como veio',
   assert.deepEqual(closeAtLastVisit([], 10, '2026-11-23'), []);
 });
 
+test('conexão: banco remoto só com SSL, local sem SSL, e o sslmode sai da URL', () => {
+  const remoto = connectionConfig('postgresql://u:s%40x@aws-1-sa-east-1.pooler.supabase.com:5432/postgres?sslmode=require');
+  assert.deepEqual(remoto.ssl, { rejectUnauthorized: false });
+  assert.ok(!remoto.connectionString.includes('sslmode'));
+  assert.ok(remoto.connectionString.includes('s%40x'), 'a senha codificada continua codificada');
+  assert.equal(remoto.keepAlive, true);
+  assert.match(remoto.options, /default_transaction_read_only=on/);
+  assert.equal(connectionConfig('postgresql://u:s@127.0.0.1:5432/x').ssl, false);
+  assert.throws(() => connectionConfig('postgresql://u:s@db.exemplo.com/x?sslmode=disable'), /SSL/);
+});
+
 test('produto sem histórico recebe lista vazia', () => {
   const [product] = mapDatabaseProducts({
     offers: [{ loja: 'kabum', produto_id: 'novo', nome: 'Novo', url: 'https://www.kabum.com.br/produto/1/x',
@@ -95,15 +107,20 @@ assert conninfo_to_dict(url)['dbname'].endswith('_test')
 name='bot_web_'+uuid4().hex+'_test'
 with psycopg.connect(url,autocommit=True) as c:
     c.execute(sql.SQL('CREATE DATABASE {}').format(sql.Identifier(name)))
-print(json.dumps(dict(name=name,url=make_conninfo(url,dbname=name))))
+# O painel usa o driver pg, que só aceita a conexão no formato de URL.
+from urllib.parse import quote
+d=conninfo_to_dict(url)
+web=f"postgresql://{quote(d.get('user',''),safe='')}:{quote(d.get('password',''),safe='')}@{d.get('host','localhost')}:{d.get('port','5432')}/{name}"
+print(json.dumps(dict(name=name,url=make_conninfo(url,dbname=name),web=web)))
 `;
     const database = JSON.parse(run(setup));
     const original = process.env.DATABASE_URL;
     const originalPanel = process.env.PANEL_DATABASE_URL;
     try {
+      // O Python do scraper grava por DATABASE_URL; o painel lê por PANEL_DATABASE_URL,
+      // no formato de URL que o driver pg aceita. Os dois apontam para o banco descartável.
       process.env.DATABASE_URL = database.url;
-      // O usuário só-leitura do .env apontaria para outro banco.
-      delete process.env.PANEL_DATABASE_URL;
+      process.env.PANEL_DATABASE_URL = database.web;
       run(`
 import os,sys
 from pathlib import Path
@@ -170,7 +187,8 @@ with psycopg.connect(os.environ['DATABASE_URL']) as c:
     } finally {
       if (original === undefined) delete process.env.DATABASE_URL;
       else process.env.DATABASE_URL = original;
-      if (originalPanel !== undefined) process.env.PANEL_DATABASE_URL = originalPanel;
+      if (originalPanel === undefined) delete process.env.PANEL_DATABASE_URL;
+      else process.env.PANEL_DATABASE_URL = originalPanel;
       run(`
 import os,psycopg
 from psycopg import sql
