@@ -166,6 +166,8 @@ def test_main_continuo_reconecta_depois_que_a_conexao_cai(monkeypatch):
 
     import infrastructure.persistencia.postgres as postgres
     monkeypatch.setattr(postgres, "conectar", conectar_falso)
+    # A conexão falsa não responde SQL; a conferência das categorias tem teste próprio.
+    monkeypatch.setattr(postgres, "categorias_conhecidas", lambda _conexao: set())
     monkeypatch.setattr(composicao, "executar_rodada", rodada_falsa)
     monkeypatch.setattr(agendador.time, "sleep", espera_que_para_depois_de(2, []))
     monkeypatch.setenv("DATABASE_URL", "postgresql://u:s@localhost/promo")
@@ -177,3 +179,21 @@ def test_main_continuo_reconecta_depois_que_a_conexao_cai(monkeypatch):
     assert rodadas[0] is abertas[0]
     assert rodadas[1] is abertas[1]  # a segunda rodada usou uma conexão nova
     assert abertas[0].closed and abertas[1].closed  # a nova é fechada ao sair
+
+
+def test_banco_sem_migracao_para_na_partida_dizendo_qual_rodar(monkeypatch, caplog):
+    from application.portas import BancoDesatualizado
+    import infrastructure.persistencia.postgres as postgres
+
+    def faltando(_conexao):
+        raise BancoDesatualizado("rode sql/005_categorias.sql")
+
+    monkeypatch.setattr(postgres, "conectar", lambda _url: ConexaoFalsa())
+    monkeypatch.setattr(postgres, "categorias_conhecidas", faltando)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:s@localhost/promo")
+
+    with pytest.raises(SystemExit):
+        agendador.main(["--persistencia", "postgres", "--eventos", "console", "--uma-vez"])
+
+    assert "sql/005_categorias.sql" in caplog.text
+    assert "u:s@" not in caplog.text

@@ -34,6 +34,7 @@ type Promocao struct {
 	DescontoPercentual string // ex.: "29.59"
 	Cupom              Cupom
 	BaseDesconto       string // de onde vem o desconto (ver as constantes Base*); vazio = não informado
+	Categoria          string // slug da categoria (tabela categorias), ex.: "consoles"; vazio = não informada
 	OcorridoEm         time.Time
 }
 

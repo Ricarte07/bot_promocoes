@@ -18,12 +18,12 @@ interfaces/agendador.py.
 import logging
 import time
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable, Optional
 
 import requests
 
-from application.portas import ColetorDePrecos, ObservacaoDeProduto, ProdutoMonitorado
+from application.portas import ColetorDePrecos, ObservacaoDeProduto, PrecoColetado, ProdutoMonitorado
 from infrastructure.scrapers.base import PaginaInvalida, ProdutoExtraido, baixar_html, converter
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ class ColetorDeListagem(ColetorDePrecos):
                 pagina = self._coletar_pagina(url)
                 if pagina is None:
                     break
-                coletados.extend(self.converter_pagina(pagina))
+                coletados.extend(_com_categoria(self.converter_pagina(pagina), listagem.categoria))
                 if not pagina.tem_proxima:
                     break
                 numero += 1
@@ -119,3 +119,11 @@ class ColetorDeListagem(ColetorDePrecos):
             self.loja, url, pagina.pagina_atual, pagina.total_paginas, len(pagina.itens),
         )
         return pagina
+
+
+def _com_categoria(itens: list[ObservacaoDeProduto], categoria: Optional[str]) -> list[ObservacaoDeProduto]:
+    """Todo preço visto numa listagem recebe a categoria dela (quando há uma)."""
+    if categoria is None:
+        return itens
+    return [replace(item, categoria=categoria) if isinstance(item, PrecoColetado) else item
+            for item in itens]

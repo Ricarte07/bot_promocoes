@@ -6,7 +6,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.conninfo import conninfo_to_dict
 
-from application.portas import FonteDeProdutosMonitorados, ProdutoMonitorado
+from application.portas import BancoDesatualizado, FonteDeProdutosMonitorados, ProdutoMonitorado
 from domain.cupom import Cupom
 from domain.oferta import EstadoOferta, Oferta
 from domain.preco import Preco
@@ -141,6 +141,7 @@ class OfertaRepositorioPostgres(OfertaRepositorio):
             em_promocao=row['em_promocao'],
             base_desconto=row['base_desconto'],
             desconto_percentual=row['desconto_percentual'],
+            categoria=row['categoria'],
         ))
 
     def _lido(self, produto_id: str, loja: str):
@@ -182,17 +183,19 @@ class OfertaRepositorioPostgres(OfertaRepositorio):
                    INSERT INTO public.ofertas
                    (loja,produto_id,nome,url,preco_referencia,preco_atual,preco_de,
                     preco_final,cupom_codigo,cupom_desconto_percentual,em_promocao,
-                    base_desconto,desconto_percentual)
+                    base_desconto,desconto_percentual,categoria)
                    VALUES (%(loja)s,%(produto_id)s,%(nome)s,%(url)s,%(preco_referencia)s,
                            %(preco)s,%(preco_de)s,%(preco_final)s,%(codigo)s,%(percentual)s,
-                           %(em_promocao)s,%(base_desconto)s,%(desconto_percentual)s)
+                           %(em_promocao)s,%(base_desconto)s,%(desconto_percentual)s,
+                           %(categoria)s)
                    ON CONFLICT (loja,produto_id) DO UPDATE SET
                    nome=EXCLUDED.nome,url=EXCLUDED.url,preco_atual=EXCLUDED.preco_atual,
                    preco_de=EXCLUDED.preco_de,preco_final=EXCLUDED.preco_final,
                    cupom_codigo=EXCLUDED.cupom_codigo,
                    cupom_desconto_percentual=EXCLUDED.cupom_desconto_percentual,
                    em_promocao=EXCLUDED.em_promocao,base_desconto=EXCLUDED.base_desconto,
-                   desconto_percentual=EXCLUDED.desconto_percentual,atualizada_em=clock_timestamp()
+                   desconto_percentual=EXCLUDED.desconto_percentual,categoria=EXCLUDED.categoria,
+                   atualizada_em=clock_timestamp()
                )
                -- O histórico guarda mudanças, não coletas: uma linha nova só quando
                -- preço, "de", preço final ou cupom diferem da última linha do produto.
@@ -218,7 +221,8 @@ class OfertaRepositorioPostgres(OfertaRepositorio):
              "preco_referencia": e.preco_referencia.valor, "preco": e.preco_atual.valor,
              "preco_de": preco_de, "preco_final": e.preco_final.valor,
              "codigo": codigo, "percentual": percentual, "em_promocao": e.em_promocao,
-             "base_desconto": e.base_desconto, "desconto_percentual": e.desconto_percentual},
+             "base_desconto": e.base_desconto, "desconto_percentual": e.desconto_percentual,
+             "categoria": e.categoria},
         )
 
     def historico_recente(self, produto_id: str, loja: str) -> HistoricoRecente:
@@ -232,12 +236,25 @@ class OfertaRepositorioPostgres(OfertaRepositorio):
         return _historico_da_linha(row)
 
 
+def categorias_conhecidas(conexao) -> set[str]:
+    """Os slugs da tabela categorias. Sem a tabela, explica qual migração falta."""
+    try:
+        rows = conexao.execute("SELECT slug FROM public.categorias").fetchall()
+    except psycopg.errors.UndefinedTable:
+        raise BancoDesatualizado(
+            "A tabela categorias não existe: rode sql/005_categorias.sql no banco antes de "
+            "ligar o scraper (sem ela, as ofertas não são gravadas)."
+        ) from None
+    return {row['slug'] for row in rows}
+
+
 class FonteDeProdutosPostgres(FonteDeProdutosMonitorados):
     def __init__(self, conexao):
         self.conexao = conexao
 
     def listar(self) -> list[ProdutoMonitorado]:
         rows = self.conexao.execute(
-            "SELECT loja,url,tipo,paginas FROM public.produtos_monitorados WHERE ativo ORDER BY id"
+            "SELECT loja,url,tipo,paginas,categoria FROM public.produtos_monitorados"
+            " WHERE ativo ORDER BY id"
         ).fetchall()
         return [ProdutoMonitorado(**row) for row in rows]

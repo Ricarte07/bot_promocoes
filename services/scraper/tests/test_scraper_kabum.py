@@ -200,3 +200,25 @@ def test_falha_em_uma_pagina_nao_derruba_a_rodada():
     itens = coletor.coletar()
 
     assert [item.produto_id for item in itens] == ["415807"]
+
+
+def test_produto_avulso_recebe_a_categoria_da_sua_url():
+    coletor = ColetorKabum(
+        urls=[URL_EM_ESTOQUE],
+        baixar=DownloadFalso({URL_EM_ESTOQUE: ler_fixture("kabum_produto_em_estoque.html")}),
+        esperar=lambda _: None,
+        categorias={URL_EM_ESTOQUE: "coolers"},
+    )
+
+    (item,) = coletor.coletar()
+
+    assert isinstance(item, PrecoColetado)
+    assert item.categoria == "coolers"
+
+
+def test_produto_avulso_sem_categoria_configurada_fica_sem_categoria():
+    coletor, _, _ = montar({URL_EM_ESTOQUE: ler_fixture("kabum_produto_em_estoque.html")})
+
+    (item,) = coletor.coletar()
+
+    assert item.categoria is None

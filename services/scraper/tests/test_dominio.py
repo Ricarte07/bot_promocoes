@@ -211,7 +211,8 @@ def test_queda_adicional_durante_a_promocao_dispara_de_novo():
 
 
 def _oferta_em_promocao():
-    oferta = Oferta("1", "kabum", Preco(Decimal("1000")), nome="Placa", url="https://loja/1")
+    oferta = Oferta("1", "kabum", Preco(Decimal("1000")), nome="Placa", url="https://loja/1",
+                    categoria="placas-de-video")
     oferta.registrar_preco(Preco(Decimal("900")), cupom=Cupom("DEZ", Decimal("10")),
                            preco_de=Preco(Decimal("1200")))
     oferta.coletar_eventos()
@@ -227,6 +228,7 @@ def test_restaurar_devolve_a_mesma_foto_sem_gerar_evento():
     assert restaurada.estado() == original.estado()
     assert isinstance(original.estado(), EstadoOferta)
     assert restaurada.em_promocao
+    assert restaurada.categoria == "placas-de-video"
     assert restaurada.preco_final.valor == Decimal("810.00")
     assert restaurada.coletar_eventos() == []
 

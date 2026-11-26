@@ -19,6 +19,8 @@ class PromocaoDetectada:
     # De onde vem o desconto: "referencia", "menor_30_dias" ou "preco_de_loja"
     # (ver domain/regras_promocao.py). Vazio em eventos montados fora da Oferta.
     base_desconto: str = ""
+    # Slug da categoria do produto (tabela categorias); None quando não se sabe.
+    categoria: Optional[str] = None
     ocorrido_em: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     @property

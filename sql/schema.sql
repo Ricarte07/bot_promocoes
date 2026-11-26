@@ -8,8 +8,31 @@ CREATE TABLE public.produtos_monitorados (
     tipo text NOT NULL DEFAULT 'produto' CHECK (tipo IN ('produto', 'listagem')),
     paginas integer NOT NULL DEFAULT 1 CHECK (paginas > 0),
     ativo boolean NOT NULL DEFAULT true,
+    categoria text,
     UNIQUE (loja, url)
 );
+-- Lista única das categorias: o menu do Telegram é montado a partir dela.
+-- ofertas.categoria e produtos_monitorados.categoria não têm chave estrangeira:
+-- uma categoria desconhecida no produtos.json vira só um aviso no log.
+CREATE TABLE public.categorias (
+    slug text PRIMARY KEY CHECK (slug ~ '^[a-z0-9-]+$'),
+    nome text NOT NULL CHECK (nome <> ''),
+    ordem integer NOT NULL,
+    ativa boolean NOT NULL DEFAULT true
+);
+INSERT INTO public.categorias (slug, nome, ordem) VALUES
+    ('placas-de-video', 'Placas de vídeo', 10),
+    ('processadores', 'Processadores', 20),
+    ('placas-mae', 'Placas-mãe', 30),
+    ('coolers', 'Coolers', 40),
+    ('fontes', 'Fontes', 50),
+    ('monitores', 'Monitores', 60),
+    ('perifericos', 'Periféricos', 70),
+    ('controles', 'Controles', 80),
+    ('impressoras', 'Impressoras', 90),
+    ('consoles', 'Consoles e jogos', 100),
+    ('notebooks', 'Notebooks', 110),
+    ('pcs-montados', 'PCs montados', 120);
 CREATE TABLE public.referencias_precos (
     loja text NOT NULL,
     produto_id text NOT NULL,
@@ -31,6 +54,7 @@ CREATE TABLE public.ofertas (
     -- A promoção aprovada pelas regras do bot: de onde vem o desconto e quanto ele é.
     base_desconto text CHECK (base_desconto IN ('referencia', 'menor_30_dias', 'preco_de_loja')),
     desconto_percentual numeric CHECK (desconto_percentual >= 0 AND desconto_percentual < 100),
+    categoria text,
     atualizada_em timestamptz NOT NULL DEFAULT clock_timestamp(),
     PRIMARY KEY (loja, produto_id),
     CHECK (cupom_codigo IS NOT NULL OR cupom_desconto_percentual IS NULL),
@@ -68,8 +92,9 @@ ALTER TABLE public.ofertas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.referencias_precos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.historico_precos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.eventos_pendentes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.categorias ENABLE ROW LEVEL SECURITY;
 -- Só o backend, conectado como proprietário, tem acesso. Nenhuma política pública.
-REVOKE ALL ON public.produtos_monitorados, public.ofertas, public.referencias_precos, public.historico_precos, public.eventos_pendentes FROM PUBLIC;
+REVOKE ALL ON public.produtos_monitorados, public.ofertas, public.referencias_precos, public.historico_precos, public.eventos_pendentes, public.categorias FROM PUBLIC;
 REVOKE ALL ON SEQUENCE public.produtos_monitorados_id_seq, public.historico_precos_id_seq, public.eventos_pendentes_id_seq FROM PUBLIC;
 -- Estes papéis existem no Supabase, mas não necessariamente no PostgreSQL local.
 DO $$
@@ -77,7 +102,7 @@ DECLARE papel text;
 BEGIN
     FOREACH papel IN ARRAY ARRAY['anon', 'authenticated', 'service_role'] LOOP
         IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = papel) THEN
-            EXECUTE format('REVOKE ALL ON public.produtos_monitorados, public.ofertas, public.referencias_precos, public.historico_precos, public.eventos_pendentes FROM %I', papel);
+            EXECUTE format('REVOKE ALL ON public.produtos_monitorados, public.ofertas, public.referencias_precos, public.historico_precos, public.eventos_pendentes, public.categorias FROM %I', papel);
             EXECUTE format('REVOKE ALL ON SEQUENCE public.produtos_monitorados_id_seq, public.historico_precos_id_seq, public.eventos_pendentes_id_seq FROM %I', papel);
         END IF;
     END LOOP;

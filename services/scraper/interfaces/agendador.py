@@ -24,6 +24,7 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
+from application.portas import BancoDesatualizado
 from interfaces.composicao import (
     ARQUIVO_PADRAO,
     FONTES_DE_PRODUTOS,
@@ -187,6 +188,10 @@ def main(argumentos: Optional[list[str]] = None) -> None:
         executar_em_laco(
             montagem.rodada, opcoes.intervalo_minutos * 60, uma_vez=opcoes.uma_vez, esperar=time.sleep
         )
+    except BancoDesatualizado as erro:
+        # Mensagem escrita por nós, sem DSN: pode ir inteira para o log.
+        logger.error("Coleta interrompida. %s", erro)
+        raise SystemExit(1) from None
     except Exception:
         # Drivers podem incluir credenciais na mensagem de erro; não imprimir traceback/DSN.
         logger.error("Coleta interrompida. Confira a configuração escolhida, conexão, SSL e "

@@ -35,9 +35,12 @@ class ProcessarColeta:
                         preco_referencia=referencia or item.preco,
                         nome=item.nome,
                         url=item.url,
+                        categoria=item.categoria,
                     )
                 oferta.nome = item.nome or oferta.nome
                 oferta.url = item.url or oferta.url
+                # Produto que aparece em duas listagens fica com a categoria da última coleta.
+                oferta.categoria = item.categoria or oferta.categoria
                 # Lido antes de salvar: o histórico não inclui esta coleta.
                 historico = self.repositorio.historico_recente(item.produto_id, item.loja)
                 oferta.registrar_preco(

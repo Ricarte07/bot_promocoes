@@ -82,7 +82,7 @@ def test_reinicio_historico_cupons_sem_repetir_promocao(banco):
         assert c.execute('SELECT count(*) AS n FROM public.historico_precos').fetchone()['n'] == 2
         rows = c.execute('SELECT payload FROM public.eventos_pendentes').fetchall()
         assert len(rows) == 1
-        assert rows[0]['payload']['versao'] == 3
+        assert rows[0]['payload']['versao'] == 4
         assert rows[0]['payload']['preco_final'] == '72.00'
         # Cupom sem condição de desconto permanece desconhecido; cupom ausente é removido.
         assert coletar(c, [item('70', Cupom('CODIGO'))]) == 1
@@ -177,7 +177,7 @@ def test_de_inflado_e_conferido_pelo_historico_do_banco(banco):
         assert coletar(c, [item('3100.00', preco_de='6678.23', produto_id='rtx')]) == 1
 
         payload = c.execute('SELECT payload FROM public.eventos_pendentes').fetchone()['payload']
-        assert payload['versao'] == 3
+        assert payload['versao'] == 4
         assert payload['base_desconto'] == 'menor_30_dias'
         assert payload['preco_referencia'] == '6678.23'
 
@@ -267,3 +267,69 @@ def test_cada_produto_custa_poucas_idas_ao_banco(banco):
         # 5 produtos × (trava + leitura + gravação) + 5 eventos na fila (caiu 20%).
         assert contada.comandos == 5 * 3 + 5
         assert c.execute('SELECT count(*) AS n FROM public.historico_precos').fetchone()['n'] == 10
+
+
+# --- categoria ---------------------------------------------------------------
+
+
+def test_categoria_fica_gravada_na_oferta_e_vai_no_evento(banco):
+    from dataclasses import replace
+    import json
+    with conectar(banco) as c:
+        coletar(c, [replace(item('100'), categoria='notebooks')])
+        assert coletar(c, [replace(item('80'), categoria='notebooks')]) == 1
+        linha = c.execute("SELECT categoria FROM public.ofertas WHERE produto_id='descoberto'").fetchone()
+        assert linha['categoria'] == 'notebooks'
+        payload = c.execute('SELECT payload FROM public.eventos_pendentes').fetchone()['payload']
+        assert payload['versao'] == 4 and payload['categoria'] == 'notebooks'
+    with conectar(banco) as c:
+        assert OfertaRepositorioPostgres(c).buscar('descoberto', 'kabum').categoria == 'notebooks'
+
+
+def test_fonte_postgres_le_a_categoria_do_endereco(banco):
+    with conectar(banco) as c:
+        c.execute("INSERT INTO public.produtos_monitorados (loja,url,tipo,paginas,categoria) "
+                  "VALUES ('kabum','https://www.kabum.com.br/gamer/consoles','listagem',1,'consoles')")
+        assert FonteDeProdutosPostgres(c).listar()[0].categoria == 'consoles'
+
+
+def test_tabela_categorias_vem_preenchida_e_protegida(banco):
+    from infrastructure.persistencia.postgres import categorias_conhecidas
+    with conectar(banco) as c:
+        conhecidas = categorias_conhecidas(c)
+        assert {'placas-de-video', 'fontes', 'consoles', 'notebooks', 'pcs-montados'} <= conhecidas
+        assert len(conhecidas) == 12
+        assert c.execute("SELECT relrowsecurity FROM pg_class "
+                         "WHERE oid = 'public.categorias'::regclass").fetchone()['relrowsecurity']
+
+
+def test_categorias_do_produtos_json_existem_no_banco(banco):
+    from infrastructure.persistencia.postgres import categorias_conhecidas
+    from infrastructure.persistencia.produtos_json import FonteDeProdutosJson
+    from interfaces.composicao import ARQUIVO_PADRAO, categorias_desconhecidas
+    with conectar(banco) as c:
+        produtos = FonteDeProdutosJson(ARQUIVO_PADRAO).listar()
+        assert categorias_desconhecidas(produtos, categorias_conhecidas(c)) == []
+
+
+def test_sem_a_migracao_005_o_erro_diz_o_que_rodar(banco):
+    from application.portas import BancoDesatualizado
+    from infrastructure.persistencia.postgres import categorias_conhecidas
+    with conectar(banco) as c:
+        c.execute('DROP TABLE public.categorias')
+        with pytest.raises(BancoDesatualizado, match='005_categorias'):
+            categorias_conhecidas(c)
+
+
+def test_migracao_005_leva_um_banco_antigo_ao_schema_atual(banco):
+    raiz = Path(__file__).resolve().parents[3]
+    with conectar(banco) as c:
+        c.execute('DROP TABLE public.categorias')
+        c.execute('ALTER TABLE public.ofertas DROP COLUMN categoria')
+        c.execute('ALTER TABLE public.produtos_monitorados DROP COLUMN categoria')
+        c.execute((raiz / 'sql/005_categorias.sql').read_text(encoding='utf-8'))
+        colunas = c.execute(
+            "SELECT table_name FROM information_schema.columns WHERE column_name='categoria' "
+            "AND table_schema='public' ORDER BY table_name").fetchall()
+        assert [r['table_name'] for r in colunas] == ['ofertas', 'produtos_monitorados']
+        assert c.execute('SELECT count(*) AS n FROM public.categorias').fetchone()['n'] == 12
