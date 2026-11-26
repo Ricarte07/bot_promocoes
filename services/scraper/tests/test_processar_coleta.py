@@ -109,3 +109,44 @@ def test_oferta_que_volta_mantem_o_preco_de_referencia():
     coletor.precos = [item("900")]
     caso_de_uso.executar()
     assert caso_de_uso.repositorio.buscar("notebook-x", "loja-a").preco_referencia.valor == Decimal("1000")
+
+
+# --- categoria -------------------------------------------------------------
+
+
+def com_categoria(valor, categoria):
+    from dataclasses import replace
+    return replace(item(valor), categoria=categoria)
+
+
+def test_categoria_coletada_chega_ao_evento():
+    coletor, publicador, caso_de_uso = montar()
+    coletor.precos = [com_categoria("1000", "notebooks")]
+    caso_de_uso.executar()
+    coletor.precos = [com_categoria("800", "notebooks")]
+
+    caso_de_uso.executar()
+
+    assert publicador.publicados[0].categoria == "notebooks"
+
+
+def test_produto_visto_em_outra_listagem_fica_com_a_ultima_categoria():
+    coletor, publicador, caso_de_uso = montar()
+    coletor.precos = [com_categoria("1000", "consoles")]
+    caso_de_uso.executar()
+    coletor.precos = [com_categoria("800", "controles")]
+
+    caso_de_uso.executar()
+
+    assert publicador.publicados[0].categoria == "controles"
+
+
+def test_coleta_sem_categoria_mantem_a_que_ja_se_sabia():
+    coletor, publicador, caso_de_uso = montar()
+    coletor.precos = [com_categoria("1000", "monitores")]
+    caso_de_uso.executar()
+    coletor.precos = [item("800")]
+
+    caso_de_uso.executar()
+
+    assert publicador.publicados[0].categoria == "monitores"

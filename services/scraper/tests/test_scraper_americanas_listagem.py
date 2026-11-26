@@ -152,3 +152,13 @@ def test_com_uma_pagina_configurada_nao_ha_aviso(caplog):
     coletor.coletar()
 
     assert "não sei abrir" not in caplog.text
+
+
+def test_produtos_da_listagem_recebem_a_categoria_dela():
+    impressoras = ProdutoMonitorado("americanas", URL_LISTAGEM, tipo="listagem", categoria="impressoras")
+    coletor, _, _ = montar({URL_LISTAGEM: ler_fixture("americanas_listagem.html")}, [impressoras])
+
+    itens = [i for i in coletor.coletar() if isinstance(i, PrecoColetado)]
+
+    assert itens
+    assert {i.categoria for i in itens} == {"impressoras"}

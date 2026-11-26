@@ -39,6 +39,8 @@ class EstadoOferta:
     # None quando a oferta não está em promoção.
     base_desconto: Optional[str] = None
     desconto_percentual: Optional[Decimal] = None
+    # Slug da categoria em que o produto foi visto por último (tabela categorias).
+    categoria: Optional[str] = None
 
 
 class Oferta:
@@ -69,11 +71,13 @@ class Oferta:
         preco_referencia: Preco,
         nome: str = "",
         url: str = "",
+        categoria: Optional[str] = None,
     ):
         self.produto_id = produto_id
         self.loja = loja
         self.nome = nome
         self.url = url
+        self.categoria = categoria
         self.preco_referencia = preco_referencia
         self.preco_atual = preco_referencia
         self.preco_de: Optional[Preco] = None
@@ -121,6 +125,7 @@ class Oferta:
                     url=self.url,
                     cupom=cupom,
                     base_desconto=promocao.origem or "",
+                    categoria=self.categoria,
                 )
             )
 
@@ -139,6 +144,7 @@ class Oferta:
             url=self.url,
             base_desconto=self.base_desconto,
             desconto_percentual=self.desconto_percentual,
+            categoria=self.categoria,
         )
 
     @classmethod
@@ -149,7 +155,7 @@ class Oferta:
         coleta nova, então não decide promoção nem gera evento.
         """
         oferta = cls(estado.produto_id, estado.loja, estado.preco_referencia,
-                     nome=estado.nome, url=estado.url)
+                     nome=estado.nome, url=estado.url, categoria=estado.categoria)
         oferta.preco_atual = estado.preco_atual
         oferta.preco_final = estado.preco_final
         oferta.preco_de = estado.preco_de

@@ -72,3 +72,47 @@ def test_paginas_invalidas_e_erro(tmp_path):
 def test_item_sem_url_nem_listagem_e_invalido(tmp_path):
     with pytest.raises(ArquivoDeProdutosInvalido):
         FonteDeProdutosJson(escrever(tmp_path, '[{"loja": "kabum", "paginas": 2}]')).listar()
+
+
+# --- categoria -------------------------------------------------------------
+
+
+def test_le_a_categoria_de_produto_e_de_listagem(tmp_path):
+    arquivo = escrever(
+        tmp_path,
+        '[{"loja": "kabum", "url": "https://www.kabum.com.br/produto/1/a", "categoria": "fontes"},'
+        ' {"loja": "kabum", "listagem": "https://www.kabum.com.br/gamer/consoles",'
+        '  "paginas": 2, "categoria": "consoles"}]',
+    )
+
+    produto, listagem = FonteDeProdutosJson(arquivo).listar()
+
+    assert produto.categoria == "fontes"
+    assert listagem.categoria == "consoles"
+    assert listagem.paginas == 2
+
+
+def test_item_sem_categoria_fica_com_categoria_vazia(tmp_path):
+    arquivo = escrever(tmp_path, '[{"loja": "kabum", "url": "https://www.kabum.com.br/produto/1/a"}]')
+
+    assert FonteDeProdutosJson(arquivo).listar()[0].categoria is None
+
+
+@pytest.mark.parametrize("categoria", ['"Placas de Vídeo"', '""', '7', '"placas_de_video"'])
+def test_categoria_fora_do_formato_e_recusada(tmp_path, categoria):
+    arquivo = escrever(
+        tmp_path,
+        f'[{{"loja": "kabum", "url": "https://www.kabum.com.br/produto/1/a", "categoria": {categoria}}}]',
+    )
+
+    with pytest.raises(ArquivoDeProdutosInvalido, match="categoria"):
+        FonteDeProdutosJson(arquivo).listar()
+
+
+def test_o_produtos_json_do_projeto_tem_categoria_em_todos_os_itens():
+    from interfaces.composicao import ARQUIVO_PADRAO
+
+    produtos = FonteDeProdutosJson(ARQUIVO_PADRAO).listar()
+
+    assert produtos
+    assert [p.url for p in produtos if not p.categoria] == []

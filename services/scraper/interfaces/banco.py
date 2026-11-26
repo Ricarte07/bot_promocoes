@@ -19,14 +19,14 @@ def main():
             with conexao.transaction():
                 for produto in FonteDeProdutosJson(opcoes.produtos).listar():
                     conexao.execute(
-                        """INSERT INTO public.produtos_monitorados (loja,url,tipo,paginas)
-                        VALUES (%s,%s,%s,%s) ON CONFLICT (loja,url) DO UPDATE
-                        SET tipo=EXCLUDED.tipo,paginas=EXCLUDED.paginas""",
-                        (produto.loja, produto.url, produto.tipo, produto.paginas),
+                        """INSERT INTO public.produtos_monitorados (loja,url,tipo,paginas,categoria)
+                        VALUES (%s,%s,%s,%s,%s) ON CONFLICT (loja,url) DO UPDATE
+                        SET tipo=EXCLUDED.tipo,paginas=EXCLUDED.paginas,categoria=EXCLUDED.categoria""",
+                        (produto.loja, produto.url, produto.tipo, produto.paginas, produto.categoria),
                     )
         # Consultas fixas; nenhuma credencial ou payload é exibido.
         for tabela in ('produtos_monitorados', 'ofertas', 'referencias_precos',
-                       'historico_precos', 'eventos_pendentes'):
+                       'historico_precos', 'eventos_pendentes', 'categorias'):
             from psycopg import sql
             total = conexao.execute(sql.SQL('SELECT count(*) AS total FROM public.{}').format(
                 sql.Identifier(tabela))).fetchone()['total']

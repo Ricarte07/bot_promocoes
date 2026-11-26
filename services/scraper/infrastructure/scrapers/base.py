@@ -16,7 +16,7 @@ ColetorDeListagem, em infrastructure/scrapers/listagem.py.
 import logging
 import time
 from abc import abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from typing import Callable, Optional
 
@@ -66,7 +66,8 @@ class ColetorPorUrls(ColetorDePrecos):
     """Monitora uma lista fixa de URLs de produto de uma loja.
 
     Recebe a função de download no construtor para que os testes possam
-    injetar uma versão falsa, sem rede.
+    injetar uma versão falsa, sem rede. categorias diz, por URL, a categoria
+    que o produto daquela página recebe.
     """
 
     loja: str  # cada subclasse define o nome da loja
@@ -77,8 +78,10 @@ class ColetorPorUrls(ColetorDePrecos):
         baixar: Callable[[str], str] = baixar_html,
         intervalo_segundos: float = 2.0,
         esperar: Callable[[float], None] = time.sleep,
+        categorias: Optional[dict[str, str]] = None,
     ):
         self.urls = list(urls)
+        self._categorias = dict(categorias or {})
         self._baixar = baixar
         self._intervalo = intervalo_segundos
         self._esperar = esperar
@@ -107,7 +110,11 @@ class ColetorPorUrls(ColetorDePrecos):
             # Uma página com problema não pode derrubar a rodada inteira.
             logger.warning("%s: falha ao coletar %s: %s", self.loja, url, erro)
             return None
-        return converter(produto, url, self.loja)
+        item = converter(produto, url, self.loja)
+        categoria = self._categorias.get(url)
+        if categoria is not None and isinstance(item, PrecoColetado):
+            item = replace(item, categoria=categoria)
+        return item
 
 
 def converter(

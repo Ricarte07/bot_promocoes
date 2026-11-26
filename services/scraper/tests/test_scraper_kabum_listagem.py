@@ -297,3 +297,33 @@ def test_produto_que_mudou_fica_com_o_preco_da_pagina():
     [coletado] = coletor.coletar()
 
     assert coletado.preco.valor == Decimal("2109.00")
+
+
+def test_produtos_da_listagem_recebem_a_categoria_dela():
+    consoles = ProdutoMonitorado("kabum", URL_LISTAGEM, tipo="listagem", categoria="consoles")
+    coletor, _, _ = montar({URL_LISTAGEM: ler_fixture("kabum_listagem.html")}, [consoles])
+
+    itens = [i for i in coletor.coletar() if isinstance(i, PrecoColetado)]
+
+    assert itens
+    assert {i.categoria for i in itens} == {"consoles"}
+
+
+def test_produto_reaproveitado_tambem_recebe_a_categoria_da_listagem():
+    html_listagem = ler_fixture("kabum_listagem.html")
+    placas = ProdutoMonitorado("kabum", URL_LISTAGEM, tipo="listagem", categoria="placas-de-video")
+    coletor = ColetorListagemKabum([placas], baixar=lambda _: html_listagem,
+                                   ja_confirmado=lambda item: item, esperar=lambda _: None)
+
+    itens = [i for i in coletor.coletar() if isinstance(i, PrecoColetado)]
+
+    assert itens
+    assert {i.categoria for i in itens} == {"placas-de-video"}
+
+
+def test_listagem_sem_categoria_nao_inventa_uma():
+    coletor, _, _ = montar({URL_LISTAGEM: ler_fixture("kabum_listagem.html")}, [listagem()])
+
+    itens = [i for i in coletor.coletar() if isinstance(i, PrecoColetado)]
+
+    assert {i.categoria for i in itens} == {None}

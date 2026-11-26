@@ -29,7 +29,9 @@ Redis (fila) ──► notifier (Go) ──► Telegram     painel web (Next.js,
 - o desconto fixo do Pix não conta como promoção.
 
 Cada promoção guarda a **origem** (queda vista pelo bot, menor preço em 30 dias ou "de"
-da loja), que aparece no Telegram e no painel. O notifier não repete a mesma promoção
+da loja), que aparece no Telegram e no painel, e a **categoria** do produto (placas de
+vídeo, consoles, notebooks, PCs montados...), que vem da listagem onde ele foi visto. A
+lista de categorias fica na tabela `categorias` (ver [docs/banco.md](docs/banco.md)). O notifier não repete a mesma promoção
 (mesmo produto, preço final e cupom) por 7 dias.
 
 ## Estrutura

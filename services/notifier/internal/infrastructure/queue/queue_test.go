@@ -326,8 +326,45 @@ func TestVersao3ComOrigemNulaEVersao2ContinuamAceitas(t *testing.T) {
 }
 
 func TestVersaoDesconhecidaEDescartada(t *testing.T) {
+	v5 := strings.Replace(eventoExemplo, `"versao": 2`, `"versao": 5`, 1)
+	if _, err := DecodificarEvento(map[string]any{"json": v5}); err == nil {
+		t.Error("versão 5 não existe e deveria ser recusada")
+	}
+}
+
+// --- Contrato v4: categoria ------------------------------------------------------
+
+func TestVersao4TrazACategoria(t *testing.T) {
 	v4 := strings.Replace(eventoExemplo, `"versao": 2`, `"versao": 4`, 1)
-	if _, err := DecodificarEvento(map[string]any{"json": v4}); err == nil {
-		t.Error("versão 4 não existe e deveria ser recusada")
+	v4 = strings.Replace(v4, `"ocorrido_em"`,
+		`"base_desconto": "referencia", "categoria": "consoles", "ocorrido_em"`, 1)
+
+	promocao, err := DecodificarEvento(map[string]any{"json": v4})
+
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if promocao.Categoria != "consoles" {
+		t.Errorf("categoria = %q, esperava %q", promocao.Categoria, "consoles")
+	}
+	if promocao.BaseDesconto != domain.BaseReferencia {
+		t.Errorf("base_desconto = %q, esperava %q", promocao.BaseDesconto, domain.BaseReferencia)
+	}
+}
+
+func TestVersao4SemCategoriaEVersoesAntigasFicamSemCategoria(t *testing.T) {
+	v4nula := strings.Replace(eventoExemplo, `"versao": 2`, `"versao": 4`, 1)
+	v4nula = strings.Replace(v4nula, `"ocorrido_em"`, `"categoria": null, "ocorrido_em"`, 1)
+	v3 := strings.Replace(eventoExemplo, `"versao": 2`, `"versao": 3`, 1)
+
+	for nome, bruto := range map[string]string{"v2": eventoExemplo, "v3": v3, "v4 com null": v4nula} {
+		promocao, err := DecodificarEvento(map[string]any{"json": bruto})
+		if err != nil {
+			t.Errorf("%s deveria ser aceito: %v", nome, err)
+			continue
+		}
+		if promocao.Categoria != "" {
+			t.Errorf("%s: sem categoria informada, deveria vir vazia, veio %q", nome, promocao.Categoria)
+		}
 	}
 }

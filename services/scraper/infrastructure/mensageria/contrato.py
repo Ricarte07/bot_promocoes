@@ -13,7 +13,7 @@ from domain.cupom import Cupom
 from domain.eventos import PromocaoDetectada
 
 TIPO = "promocao_detectada"
-VERSAO = 3
+VERSAO = 4
 
 _DUAS_CASAS = Decimal("0.01")
 
@@ -49,6 +49,7 @@ def serializar_evento(evento: PromocaoDetectada) -> str:
         "desconto_percentual": _dinheiro(evento.desconto_percentual),
         "cupom": _cupom(evento.cupom),
         "base_desconto": evento.base_desconto or None,
+        "categoria": evento.categoria or None,
         "ocorrido_em": evento.ocorrido_em.isoformat(),
     }
     return json.dumps(dados, ensure_ascii=False)

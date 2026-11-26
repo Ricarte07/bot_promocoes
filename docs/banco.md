@@ -136,6 +136,7 @@ na ordem, cada um uma vez. O `schema.sql` atual já inclui todos eles.
 | `sql/002_historico_so_mudancas.sql` | Apaga linhas repetidas do histórico (opcional) | não precisou: o banco foi criado já sem repetições |
 | `sql/003_painel_somente_leitura.sql` | Usuário `painel_leitura` para o painel | aplicado (senha definida no SQL Editor) |
 | `sql/004_origem_do_desconto.sql` | Colunas `base_desconto` e `desconto_percentual` | aplicado |
+| `sql/005_categorias.sql` | Tabela `categorias` (a lista do menu do Telegram) e coluna `categoria` em `ofertas` e `produtos_monitorados` | pendente: rodar **antes** de ligar o scraper desta versão |
 
 ## Variáveis
 
@@ -199,13 +200,29 @@ python -m interfaces.banco --importar-json
 python -m interfaces.agendador --fonte-produtos postgres --eventos console --uma-vez
 ```
 
-A importação atualiza tipo/páginas dos endereços já cadastrados, preserva `ativo` e
-não apaga os ausentes do JSON. Para acrescentar uma categoria pelo SQL:
+A importação atualiza tipo, páginas e categoria dos endereços já cadastrados,
+preserva `ativo` e não apaga os ausentes do JSON. Para acrescentar uma listagem pelo SQL:
 
 ```sql
-insert into public.produtos_monitorados (loja,url,tipo,paginas)
-values ('kabum','https://www.kabum.com.br/hardware','listagem',2)
+insert into public.produtos_monitorados (loja,url,tipo,paginas,categoria)
+values ('kabum','https://www.kabum.com.br/hardware','listagem',2,'placas-de-video')
 on conflict (loja,url) do nothing;
+```
+
+### Categorias
+
+A tabela `categorias` é a lista única dos tipos de produto: o menu de escolha do
+Telegram é montado a partir dela, na ordem da coluna `ordem`. Cada endereço do
+`produtos.json` diz a sua (`"categoria": "consoles"`), e todo produto visto ali grava
+essa categoria em `ofertas.categoria`. Se o mesmo produto aparece em duas listagens,
+fica a da última coleta.
+
+`ofertas.categoria` não tem chave estrangeira de propósito: uma categoria que não está
+na tabela não derruba a rodada. Na partida, o scraper confere e avisa no log. Para criar
+uma categoria nova:
+
+```sql
+insert into public.categorias (slug, nome, ordem) values ('cadeiras', 'Cadeiras', 130);
 ```
 
 Cada produto encontrado numa categoria vira uma linha de `ofertas` e novas linhas de
@@ -257,7 +274,7 @@ cada observação, mesmo quando o preço não muda.
 
 ## Testes com PostgreSQL
 
-Na pasta `services/scraper`, `pytest -q` roda tudo; sem `TEST_DATABASE_URL`, os seis
+Na pasta `services/scraper`, `pytest -q` roda tudo; sem `TEST_DATABASE_URL`, os
 testes de integração com PostgreSQL ficam pulados. Para rodá-los no Postgres do
 Docker, crie uma vez o banco base de testes:
 

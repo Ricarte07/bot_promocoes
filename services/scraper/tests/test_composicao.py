@@ -82,3 +82,16 @@ def test_montagem_com_postgres_falha_ja_na_partida(monkeypatch):
     with pytest.raises(RuntimeError, match="fora do ar"):
         montagem.iniciar()
     montagem.fechar()  # nada aberto: não pode lançar
+
+
+def test_categorias_desconhecidas_ignora_quem_nao_tem_categoria():
+    from application.portas import ProdutoMonitorado
+    from interfaces.composicao import categorias_desconhecidas
+
+    produtos = [
+        ProdutoMonitorado("kabum", "a", categoria="consoles"),
+        ProdutoMonitorado("kabum", "b", categoria="drones"),
+        ProdutoMonitorado("kabum", "c"),
+    ]
+
+    assert [p.url for p in categorias_desconhecidas(produtos, {"consoles"})] == ["b"]

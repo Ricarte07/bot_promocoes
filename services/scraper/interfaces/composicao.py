@@ -43,11 +43,20 @@ ARQUIVO_PADRAO = Path(__file__).resolve().parent.parent / "produtos.json"
 # A fábrica recebe também o "já confirmado?" (application/conferencia.py), usado por
 # quem lê preços de uma listagem e confere produto a produto na página (hoje, a Kabum).
 FabricaDeColetor = Callable[[list[ProdutoMonitorado], JaConfirmado], ColetorDePrecos]
+
+
+def _categorias_por_url(itens: list[ProdutoMonitorado]) -> dict[str, str]:
+    """A categoria de cada produto avulso, pela URL, para o coletor por URLs."""
+    return {item.url: item.categoria for item in itens if item.categoria}
+
+
 FABRICAS_DE_COLETOR: dict[tuple[str, str], FabricaDeColetor] = {
-    (KABUM, TIPO_PRODUTO): lambda itens, _: ColetorKabum(urls=[item.url for item in itens]),
+    (KABUM, TIPO_PRODUTO): lambda itens, _: ColetorKabum(
+        urls=[item.url for item in itens], categorias=_categorias_por_url(itens)),
     (KABUM, TIPO_LISTAGEM): lambda itens, ja_confirmado: ColetorListagemKabum(
         listagens=itens, ja_confirmado=ja_confirmado),
-    (AMERICANAS, TIPO_PRODUTO): lambda itens, _: ColetorAmericanas(urls=[item.url for item in itens]),
+    (AMERICANAS, TIPO_PRODUTO): lambda itens, _: ColetorAmericanas(
+        urls=[item.url for item in itens], categorias=_categorias_por_url(itens)),
     (AMERICANAS, TIPO_LISTAGEM): lambda itens, _: ColetorListagemAmericanas(listagens=itens),
 }
 
@@ -86,6 +95,13 @@ def montar_coletor(
         coletores.append(fabrica(itens, ja_confirmado))
 
     return ColetorComposto(coletores)
+
+
+def categorias_desconhecidas(
+    produtos: list[ProdutoMonitorado], conhecidas: set[str]
+) -> list[ProdutoMonitorado]:
+    """Os endereços cuja categoria não está na tabela categorias (sem categoria não conta)."""
+    return [p for p in produtos if p.categoria and p.categoria not in conhecidas]
 
 
 def limitar_produtos(produtos: list[ProdutoMonitorado], limite: int) -> list[ProdutoMonitorado]:
@@ -236,7 +252,8 @@ class Montagem:
             from infrastructure.persistencia import postgres
 
             self._conexoes = ConexaoSobDemanda(lambda: postgres.conectar(config.database_url))
-            self._conexoes.obter()  # configuração errada derruba já na partida
+            conexao = self._conexoes.obter()  # configuração errada derruba já na partida
+            self._conferir_categorias(conexao)
 
         # O que não depende da conexão é criado uma vez: a memória precisa durar entre
         # rodadas, e o cliente Redis já reconecta sozinho no próximo comando.
@@ -261,6 +278,17 @@ class Montagem:
     def fechar(self) -> None:
         if self._conexoes is not None:
             self._conexoes.fechar()
+
+    def _conferir_categorias(self, conexao) -> None:
+        """Avisa, sem parar o bot, sobre categorias do cadastro que o banco não conhece."""
+        from infrastructure.persistencia.postgres import categorias_conhecidas
+
+        conhecidas = categorias_conhecidas(conexao)
+        for produto in categorias_desconhecidas(self._fonte(conexao).listar(), conhecidas):
+            logger.warning(
+                "Categoria '%s' de %s não existe na tabela categorias; quem escolher categorias "
+                "no Telegram não vai receber esses produtos", produto.categoria, produto.url,
+            )
 
     def _fonte(self, conexao) -> FonteDeProdutosMonitorados:
         if self.config.fonte_produtos == "postgres":
